@@ -1,13 +1,14 @@
 {
   "name": "prenoms",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Explore French first names and narrow them to a shortlist.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:data": "python3 tools/check_prenoms.py --check"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
   "devEngines": {
     "packageManager": {
@@ -16,5 +17,12 @@
       "onFail": "download"
     }
   },
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "svelte": "^5.56.6",
+    "svelte-check": "^4.7.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5"
+  }
 }

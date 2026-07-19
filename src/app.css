@@ -1,0 +1,30 @@
+:root {
+  --ink: #17161a;
+  --ink-soft: #6b6874;
+  --paper: #fbfaf8;
+  --line: #e5e1da;
+  --accent: #b4553f;
+  /* The two Verdicts, used wherever keep and reject are offered as a choice. */
+  --keep: #2f8f5b;
+  --reject: #c0392b;
+
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}

@@ -51,7 +51,7 @@ _Avoid_: List, pool, catalogue
 A user's judgement of one Prénom within one Mode — kept or rejected. Keyed by
 (Mode, Prénom), so the same Prénom can be rejected as feminine and untouched as
 masculine.
-_Avoid_: Vote, swipe, like, decision
+_Avoid_: Vote, swipe, like, star, decision
 
 **Shortlist**:
 The Prénoms with a keep Verdict in a given Mode. There is one Shortlist per Mode,
@@ -87,6 +87,9 @@ _Avoid_: Leaderboard, results, standings
   nothing about the other.
 - **A Prénom is identified by its string.** There are no numeric ids — the Prénom
   List is hand-edited, so row position is not stable and must never be an identity.
+- **Starring and swiping right are one concept.** Both record a keep Verdict. The
+  browse list and the swipe deck are two ways into the same judgement, not two
+  separate collections.
 - **Prénoms are unaccented.** INSEE treats Zoé, Zoe and Zoë as three names; we treat
   them as one, written without accents. Spelling variants are not distinct Prénoms.
 
