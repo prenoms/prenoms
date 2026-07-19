@@ -25,15 +25,11 @@
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
 
-    // Importing replaces everything; there is no undo for it.
-    if (judged > 0 && !confirm("Remplacer vos Verdicts et Ratings actuels par ce fichier ?")) {
-      input.value = "";
-      return;
-    }
-
+    // Importing merges and only ever adds to the Shortlist, so no confirm.
     try {
-      importState(await file.text());
-      message = { tone: "ok", text: `Importé — ${judged} Verdicts.` };
+      const { added, promoted } = importState(await file.text());
+      const repechage = promoted > 0 ? ` ${promoted} repêchés dans la Shortlist.` : "";
+      message = { tone: "ok", text: `Fusionné — ${added} Verdicts ajoutés.${repechage}` };
     } catch (error) {
       message = { tone: "error", text: error instanceof Error ? error.message : "Import échoué." };
     }

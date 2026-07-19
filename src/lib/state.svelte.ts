@@ -90,20 +90,60 @@ export function exportState(): string {
   return JSON.stringify(persisted, null, 2);
 }
 
+/** What a merge did, so the UI can say it out loud. */
+export type ImportReport = { added: number; promoted: number };
+
 /**
- * Replaces everything with the contents of a previously exported file. Throws on
- * anything unrecognisable rather than quietly resetting — unlike load(), where a
- * corrupt key is better swallowed than fatal.
+ * Merges a previously exported file into the current state — never replaces it.
+ * The usual case is two people judging the same Prénom List on their own devices
+ * and pooling the results to finalise the choice, so an import must not cost the
+ * importer their own work.
+ *
+ * Only keeps travel. The merged Shortlist is the union of the two: a keep on
+ * either side is a keep after the merge, so a Prénom one of you rejected still
+ * shows up and gets argued about in the Duels. Incoming rejects are dropped —
+ * they would only pre-judge Prénoms the importer has not seen yet.
+ *
+ * Ratings and Duel counts follow the same rule: yours stand where you had one,
+ * and a Prénom arriving as a keep takes the partner's Rating, which seeds it
+ * better than the median syncRatings would hand out.
+ *
+ * Throws on anything unrecognisable rather than quietly doing nothing — unlike
+ * load(), where a corrupt key is better swallowed than fatal.
  */
-export function importState(json: string) {
+export function importState(json: string): ImportReport {
   const raw: unknown = JSON.parse(json);
   if (typeof raw !== "object" || raw === null || !("modes" in raw)) {
     throw new Error("Fichier non reconnu.");
   }
 
-  const next = migrate(raw);
-  persisted.nom = next.nom;
-  for (const mode of MODES) persisted.modes[mode] = next.modes[mode];
+  const incoming = migrate(raw);
+  const report: ImportReport = { added: 0, promoted: 0 };
+
+  if (persisted.nom === null) persisted.nom = incoming.nom;
+
+  for (const mode of MODES) {
+    const target = persisted.modes[mode];
+    const source = incoming.modes[mode];
+    for (const [prenom, verdict] of Object.entries(source.verdicts)) {
+      // Their rejects carry no weight: one they turned down and you never saw
+      // stays unjudged, so it still reaches your Deck and you rule on it yourself.
+      if (verdict !== "keep") continue;
+
+      const mine = target.verdicts[prenom];
+      if (mine === "keep") continue;
+      if (mine === undefined) report.added += 1;
+      else report.promoted += 1;
+
+      target.verdicts[prenom] = "keep";
+      if (source.ratings[prenom] !== undefined) {
+        target.ratings[prenom] = source.ratings[prenom];
+        target.duels[prenom] = source.duels[prenom] ?? 0;
+      }
+    }
+  }
+
+  return report;
 }
 
 /** The three views, swapped by a $state variable and mirrored into the URL hash. */

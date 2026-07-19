@@ -44,9 +44,13 @@ than trusted.
 - **Nom (optional)** — supply a family name and it is rendered after every
   Prénom, so you can judge the full name aloud. Shared across both Modes, never
   sent anywhere.
-- **Export / import** — download your judgements and ratings as JSON, or restore
-  them on another device. This is the only backup; clearing site data destroys
-  everything.
+- **Export / import** — download your judgements and ratings as JSON, or merge a
+  file back in on another device. Importing merges, it never replaces: the
+  merged shortlist is the union of both sides, so a Prénom your partner kept is
+  repêché even if you rejected it, and the two of you settle it in the Duels.
+  Only their keeps travel — a Prénom they rejected and you never saw stays
+  unjudged, waiting for you in your own deck.
+  This is the only backup; clearing site data destroys everything.
 - **Two independent Shortlists**, one per Mode. There is never a combined one.
 
 ## The data
