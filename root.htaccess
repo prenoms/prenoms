@@ -1,0 +1,64 @@
+# Deployed as `www/.htaccess` — the web root of quelprenom.xyz on OVH.
+#
+# Two jobs: put every request for /api in front of the PHP entry point, and put
+# everything else in front of the Svelte app. The second one matters more than
+# it looks: a Session id lives in the path (/s/K7M2QX9RTB) and only the client
+# can read it, so a cold visit to a shared link has to reach index.html rather
+# than a 404 — and the link is the only key there is (ADR 0003).
+
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # One canonical origin. A Session link is passed between two parents and
+    # typed back in by hand; http:// and www. forms would work but would look
+    # like different Sessions in a history or a share sheet.
+    #
+    # OVH terminates TLS upstream, so `HTTPS` is unset and the proof is in the
+    # forwarded header. Both are tested, and both must say "not https" before we
+    # redirect — a redirect loop here takes the whole site down.
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteRule ^ https://quelprenom.xyz%{REQUEST_URI} [R=301,L]
+
+    RewriteCond %{HTTP_HOST} !^quelprenom\.xyz$ [NC]
+    RewriteRule ^ https://quelprenom.xyz%{REQUEST_URI} [R=301,L]
+
+    # The whole API is one entry point; it does its own routing off REQUEST_URI,
+    # which an internal rewrite leaves untouched.
+    RewriteRule ^api(/.*)?$ server/index.php [L,QSA]
+
+    # Anything that is not a real file is the app.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Vite fingerprints what it emits — `index-CpWJbCZX.js` — so the name changes
+    # whenever the bytes do and these can be cached for good. The Prénom List is
+    # fetched at runtime and is fingerprinted the same way. Matching the hash and
+    # not just the extension keeps unfingerprinted files out of this.
+    <FilesMatch "-[A-Za-z0-9_-]{8,}\.(js|css|csv)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+
+    # The shell is the one unfingerprinted file that must stay fresh: caching it
+    # would leave people asking for asset names a deploy has already deleted.
+    <FilesMatch "^index\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+
+    # Not fingerprinted, but changing rarely enough that a day is no hardship.
+    <FilesMatch "^favicon\.svg$">
+        Header set Cache-Control "public, max-age=86400"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/css text/csv application/javascript application/json
+</IfModule>
+
+AddType text/csv .csv

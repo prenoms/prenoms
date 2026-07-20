@@ -31,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_PATH = REPO_ROOT / "data" / "prenoms.csv"
+DEFAULT_PATH = REPO_ROOT / "frontend" / "data" / "prenoms.csv"
 
 HEADER = ["firstname", "male", "female"]
 BOOLEANS = {"true", "false"}

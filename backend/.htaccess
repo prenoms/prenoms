@@ -1,0 +1,15 @@
+# Deployed as `www/server/.htaccess`.
+#
+# The PHP has to sit inside the web root, because an .htaccess cannot rewrite to
+# a target outside it. So only the front controller is reachable; `lib/` and
+# `config.php` are required from it and never served. They would execute rather
+# than leak their source, but a file that is never meant to be addressed should
+# not answer when it is.
+
+<FilesMatch "\.php$">
+    Require all denied
+</FilesMatch>
+
+<Files "index.php">
+    Require all granted
+</Files>

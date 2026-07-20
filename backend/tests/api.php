@@ -2,7 +2,7 @@
 
 /**
  * End-to-end tests: a real `php -S` on a throwaway data directory, driven over
- * HTTP the way `curl` would. Run with `php server/tests/api.php`.
+ * HTTP the way `curl` would. Run with `just test-backend`.
  */
 
 declare(strict_types=1);

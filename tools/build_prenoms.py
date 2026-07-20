@@ -62,7 +62,7 @@ DEFAULT_MIN_BIRTHS = 500  # over the whole window, to enter the list at all
 DEFAULT_FLAG_SHARE = 0.10  # share of births needed to belong to a sex's Deck
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_OUTPUT = REPO_ROOT / "data" / "prenoms.csv"
+DEFAULT_OUTPUT = REPO_ROOT / "frontend" / "data" / "prenoms.csv"
 
 
 def fetch(url: str) -> bytes:

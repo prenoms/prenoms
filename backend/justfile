@@ -1,0 +1,13 @@
+# List available recipes (default when you run `just` with no arguments)
+default:
+    @just --list
+
+# Lint every PHP source file with the built-in parser (no dependencies).
+lint:
+    for f in *.php lib/*.php tests/*.php; do php -l "$f" >/dev/null; done
+    @echo "✓ php -l: no syntax errors"
+
+# Unit tests, then the API tests against a real php -S on a throwaway data dir.
+test:
+    php tests/unit.php
+    php tests/api.php

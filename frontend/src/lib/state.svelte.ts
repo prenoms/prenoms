@@ -4,18 +4,26 @@ import { adjust, medianRating, START_RATING } from "./duel";
 import { decks } from "./prenom-list";
 import { Outbox } from "./outbox";
 import {
+  ApiError,
   ID_PATTERN,
   normaliseId,
+  createProfile,
+  createSession,
+  declareReady,
   deleteVerdict,
   fetchProfile,
   fetchSession,
+  postFinalDuel,
   putNom,
   putRatings,
   putVerdict,
   type FinalState,
   type ModeState,
+  type ProfileState,
   type ProfileSummary,
+  type SessionState,
 } from "./api";
+import { parseRoute, sessionPath, type Route } from "./route";
 
 /**
  * The state layer. `$state` still backs the views, but it is a **cache of
@@ -97,39 +105,120 @@ outbox.onError((error) => {
   connection.refused = error.message;
 });
 
-/* ------------------------------------------------------------------ loading */
+/* ------------------------------------------------------------------ routing */
 
 /**
- * Fills the cache for one Profile inside one Session. Two requests, because the
- * Session view deliberately withholds Verdicts — your own state only ever comes
- * from the Profile endpoint, addressed by its id.
+ * Where the app is. The Session id is in the path, so the link is a real URL
+ * that a cold visit resolves through the SPA fallback; `route.ts` owns the
+ * parsing and is tested there.
+ *
+ * Wrapped in `current` so the exported binding can hold the union whole and
+ * `route.current.name === "session"` narrows to something with an id.
  */
-export async function enterSession(sessionId: string, profileId: string): Promise<void> {
+export const route = $state<{ current: Route }>({ current: { name: "home" } });
+
+/**
+ * Which Profile you last claimed in this Session, in `sessionStorage` — the one
+ * thing ADR 0003 permits there, so that a tab reload does not re-prompt. It
+ * dies with the tab, which is what keeps the shared-tablet case working: the
+ * next person to open the link is asked who they are.
+ *
+ * Every access is guarded: a browser that refuses storage must still let you
+ * swipe, it just has to ask again.
+ */
+const profileKey = (id: string) => `prenoms.profile.${id}`;
+
+function rememberedProfile(id: string): string | null {
+  try {
+    const pid = normaliseId(sessionStorage.getItem(profileKey(id)) ?? "");
+    return ID_PATTERN.test(pid) ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberProfile(id: string, pid: string) {
+  try {
+    sessionStorage.setItem(profileKey(id), pid);
+  } catch {
+    // A reload will re-prompt, which is the documented fallback anyway.
+  }
+}
+
+function forgetProfile(id: string) {
+  try {
+    sessionStorage.removeItem(profileKey(id));
+  } catch {
+    // Nothing to clear, and nothing we could do about it.
+  }
+}
+
+/* ------------------------------------------------------------------ loading */
+
+function absorbSession(state: SessionState) {
+  session.id = state.id;
+  session.nom = state.nom;
+  session.merged = state.merged;
+  session.profiles = state.profiles;
+  session.final = state.final;
+}
+
+function absorbProfile(state: ProfileState) {
+  profile.id = state.id;
+  profile.name = state.name;
+  profile.ready = state.ready;
+  for (const mode of MODES) profile.modes[mode] = state.modes[mode];
+}
+
+function clearCache() {
+  session.id = null;
+  session.nom = null;
+  session.merged = false;
+  session.profiles = [];
+  session.final = null;
+  profile.id = null;
+  profile.name = "";
+  profile.ready = false;
+  for (const mode of MODES) profile.modes[mode] = emptyModeState();
+}
+
+/** The path the cache was filled from, so a hash-only Back does not refill it. */
+let loadedPath: string | null = null;
+
+/**
+ * Fills the cache for whatever the URL says. The Session and the Profile are
+ * two requests because the Session view deliberately withholds Verdicts — your
+ * own state only ever comes from the Profile endpoint, addressed by its id.
+ *
+ * Called on load and on every navigation that changes the path.
+ */
+export async function syncFromUrl(): Promise<void> {
   // Whatever the outgoing Profile still owes goes out addressed to them, before
   // the cache becomes somebody else's — the shared-tablet handover.
   flushRatings();
+  connection.refused = null;
+
+  loadedPath = location.pathname;
+  route.current = parseRoute(location.pathname);
+  ui.view = viewFromHash();
+  clearCache();
+
+  if (route.current.name === "home") {
+    status.phase = "ready";
+    status.message = null;
+    return;
+  }
+
   status.phase = "loading";
   status.message = null;
-  connection.refused = null;
+  const id = route.current.id;
   try {
-    const id = normaliseId(sessionId);
-    const pid = normaliseId(profileId);
-    const [sessionState, profileState] = await Promise.all([
-      fetchSession(id),
-      fetchProfile(id, pid),
-    ]);
-
-    session.id = sessionState.id;
-    session.nom = sessionState.nom;
-    session.merged = sessionState.merged;
-    session.profiles = sessionState.profiles;
-    session.final = sessionState.final;
-
-    profile.id = profileState.id;
-    profile.name = profileState.name;
-    profile.ready = profileState.ready;
-    for (const mode of MODES) profile.modes[mode] = profileState.modes[mode];
-
+    const state = await fetchSession(id);
+    absorbSession(state);
+    // Once merged there is no private state left to fetch and no Profile to be:
+    // the Final Profile belongs to the Session, so the link alone plays it.
+    const pid = rememberedProfile(id);
+    if (!state.merged && pid !== null) await hydrateProfile(id, pid);
     status.phase = "ready";
   } catch (error) {
     status.phase = "error";
@@ -138,46 +227,159 @@ export async function enterSession(sessionId: string, profileId: string): Promis
 }
 
 /**
- * TEMPORARY — Phase 3 owns this.
- *
- * The routing (`/s/{id}`), the join screen and the Profile picker do not exist
- * yet, so the ids come from the query string: `?s={session}&p={profile}`. The
- * Profile pick is remembered in `sessionStorage` — the one thing ADR 0003
- * permits there — so a tab reload does not need the `p` again.
+ * Re-reads the Session without disturbing the Profile cache. What the join
+ * screen and the ready dialog say about the other Profile is a snapshot from
+ * page load otherwise, and "they have not finished yet" going stale is exactly
+ * the blind confirmation the dialog exists to prevent (ADR 0003).
  */
-export function bootstrapFromQuery(): boolean {
-  const params = new URLSearchParams(location.search);
-  const sessionId = normaliseId(params.get("s") ?? "");
-  if (!ID_PATTERN.test(sessionId)) return false;
-
-  const key = `prenoms.profile.${sessionId}`;
-  const fromQuery = normaliseId(params.get("p") ?? "");
-  // Guarded like the localStorage cleanup: a browser that refuses storage must
-  // still let you swipe, it just has to ask which Profile you are again.
-  const remembered = (() => {
-    try {
-      return sessionStorage.getItem(key) ?? "";
-    } catch {
-      return "";
-    }
-  })();
-
-  const profileId = ID_PATTERN.test(fromQuery) ? fromQuery : remembered;
-  if (!ID_PATTERN.test(profileId)) return false;
-
+export async function refreshSession(): Promise<void> {
+  const id = session.id;
+  if (id === null) return;
   try {
-    sessionStorage.setItem(key, profileId);
+    absorbSession(await fetchSession(id));
   } catch {
-    // A reload will re-prompt, which is the documented fallback anyway.
+    // A refresh is a courtesy: what is on screen is still what we last knew,
+    // and any write that matters raises the banner on its own.
   }
-  void enterSession(sessionId, profileId);
-  return true;
+}
+
+/**
+ * A remembered Profile the Session no longer knows about is not an error — the
+ * Session may have been swept and recreated. Forget it and let the join screen
+ * ask again, rather than stranding the tab on a failure it cannot act on.
+ */
+async function hydrateProfile(id: string, pid: string): Promise<void> {
+  try {
+    absorbProfile(await fetchProfile(id, pid));
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "not_found") {
+      forgetProfile(id);
+      return;
+    }
+    throw error;
+  }
+}
+
+/** A real navigation: the URL changes, then the cache is refilled to match it. */
+export function go(path: string) {
+  history.pushState(null, "", path);
+  void syncFromUrl();
+}
+
+// Back and Forward. Only a changed *path* is a new Session: `setView` writes the
+// hash, which also pushes a history entry, and refilling the cache for that
+// would throw away Verdicts still queued in the Outbox — the swipe would
+// visibly undo itself. The hash is handled by `hashchange` alone.
+addEventListener("popstate", () => {
+  if (location.pathname !== loadedPath) void syncFromUrl();
+});
+
+/* ------------------------------------------------------------------ joining */
+
+/**
+ * Creates a Session and lands on the screen that hands over the link. Losing
+ * the link loses the Session for good, so that screen comes before the app
+ * rather than after it (ADR 0003).
+ */
+export async function beginSession(): Promise<void> {
+  status.phase = "loading";
+  status.message = null;
+  try {
+    const state = await createSession();
+    go(`${sessionPath(state.id)}#/share`);
+  } catch (error) {
+    status.phase = "error";
+    status.message = error instanceof Error ? error.message : "Création impossible.";
+  }
+}
+
+/** What the join screen shows when the server refuses a name. Cleared on retry. */
+export const joinError = $state<{ message: string | null }>({ message: null });
+
+/**
+ * Claims an existing Profile. No password: the Session id is the whole key.
+ *
+ * A failure here leaves the Session loaded and the join screen usable, so it is
+ * reported there rather than as a dead end — the other Profile is still a
+ * perfectly good thing to try.
+ */
+export async function claimProfile(pid: string): Promise<void> {
+  const id = session.id;
+  if (id === null) return;
+  joinError.message = null;
+  status.phase = "loading";
+  try {
+    absorbProfile(await fetchProfile(id, pid));
+    rememberProfile(id, pid);
+    setView("swipe");
+    status.phase = "ready";
+  } catch (error) {
+    status.phase = "ready";
+    joinError.message = error instanceof Error ? error.message : "Entrée impossible.";
+  }
+}
+
+/**
+ * Adds a Profile to the Session and becomes it. The Profile list is extended
+ * from the response rather than re-fetched: the server has just told us
+ * everything the Session view would.
+ */
+export async function addProfile(name: string): Promise<void> {
+  const id = session.id;
+  if (id === null) return;
+  joinError.message = null;
+  status.phase = "loading";
+  try {
+    const created = await createProfile(id, name);
+    absorbProfile(created);
+    session.profiles = [
+      ...session.profiles,
+      { id: created.id, name: created.name, ready: created.ready },
+    ];
+    rememberProfile(id, created.id);
+    setView("swipe");
+    status.phase = "ready";
+  } catch (error) {
+    // A name already taken or a third Profile: the Session is fine, the request
+    // was not, so stay on the join screen and say why.
+    status.phase = "ready";
+    joinError.message = error instanceof Error ? error.message : "Profil impossible à créer.";
+  }
+}
+
+/**
+ * Irreversible, and it merges the Session if every Profile is then ready. The
+ * Outbox is drained first: a Verdict still in flight would arrive after the
+ * merge and be refused, which would raise the banner over a swipe the user
+ * genuinely made.
+ */
+export async function declareReadyNow(): Promise<void> {
+  const id = session.id;
+  const pid = profile.id;
+  if (id === null || pid === null) return;
+  flushRatings();
+  await outbox.settled();
+  try {
+    absorbSession(await declareReady(id, pid));
+    profile.ready = true;
+  } catch (error) {
+    // The banner, not the error screen: the Session is intact and what is on
+    // screen still works — it is this one refusal that has to be said out loud.
+    connection.refused = error instanceof Error ? error.message : "Impossible de terminer.";
+  }
 }
 
 /* ------------------------------------------------------------------- writing */
 
+/**
+ * Where a per-Profile write goes, or null if there is nowhere to send it. Ready
+ * and merged are checked here rather than at each call site: after either, the
+ * server refuses every Verdict and Rating, and a write that is certain to be
+ * refused is better never sent than shown to the user as a refusal.
+ */
 function addressed(): { id: string; pid: string } | null {
   if (session.id === null || profile.id === null || status.phase !== "ready") return null;
+  if (profile.ready || session.merged) return null;
   return { id: session.id, pid: profile.id };
 }
 
@@ -265,10 +467,16 @@ addEventListener("visibilitychange", () => {
 
 /* ---------------------------------------------------------------- UI routing */
 
-/** The three views, swapped by a $state variable and mirrored into the URL hash. */
-export type View = "browse" | "swipe" | "game";
+/**
+ * The views, swapped by a $state variable and mirrored into the URL hash. Three
+ * are the app; `share` is the screen that hands over the link, which is a view
+ * rather than a moment so that it stays reachable — the link is the only key
+ * there is, and someone who mislaid it while their tab is still open can copy
+ * it again (ADR 0003).
+ */
+export type View = "browse" | "swipe" | "game" | "share";
 
-const VIEWS: readonly View[] = ["browse", "swipe", "game"];
+const VIEWS: readonly View[] = ["browse", "swipe", "game", "share"];
 
 function viewFromHash(): View {
   const candidate = location.hash.replace(/^#\/?/, "");
@@ -298,8 +506,6 @@ addEventListener("hashchange", () => {
   ui.view = viewFromHash();
 });
 
-if (location.hash === "") location.replace(`#/${ui.view}`);
-
 /** The Deck in play for the current Mode. */
 export const deck = {
   get current(): Prenom[] {
@@ -327,12 +533,14 @@ let nomTimer: ReturnType<typeof setTimeout> | null = null;
 export function setNom(value: string) {
   const nom = value.trim() === "" ? null : value;
   session.nom = nom;
-  const to = addressed();
-  if (to === null) return;
+  // Not `addressed()`: the Nom is the Session's, so it outlives both the merge
+  // and being ready, and it needs no Profile to write.
+  const id = session.id;
+  if (id === null || status.phase !== "ready") return;
   if (nomTimer !== null) clearTimeout(nomTimer);
   nomTimer = setTimeout(() => {
     nomTimer = null;
-    outbox.schedule("nom", () => putNom(to.id, nom).then(() => undefined));
+    outbox.schedule("nom", () => putNom(id, nom).then(() => undefined));
   }, NOM_DEBOUNCE);
 }
 
@@ -421,4 +629,56 @@ export function resolveDuel(winner: string, loser: string, mode: Mode = ui.mode)
   state.duels[winner] = duelsOf(winner, mode) + 1;
   state.duels[loser] = duelsOf(loser, mode) + 1;
   markRatingsDirty(mode);
+}
+
+/* ------------------------------------------------------- the Final Profile */
+
+/**
+ * Final Profile Duels go out one at a time, in the order they were played, and
+ * **outside the Outbox**: `POST /final/duels` is the one write in the API that
+ * is not idempotent — it applies an Elo adjustment and two increments per call
+ * — so a retry after a lost response would count the same Duel twice. A Duel
+ * silently played twice is worse than one openly lost, and the retry is what
+ * the Outbox is for.
+ *
+ * The chain also settles the ordering: the response carries the whole Final
+ * Profile, so an older reply landing after a newer one would put the Ranking
+ * back a step.
+ */
+let finalDuels: Promise<void> = Promise.resolve();
+
+/**
+ * Resolves one **Final Profile** Duel. Only the fact is sent: the Elo is
+ * computed by PHP inside the lock, so two parents picking at the same moment
+ * both count (ADR 0003). Never compute it here — `duel.ts` owns the per-Profile
+ * phase and nothing else.
+ *
+ * The Duel counts move locally straight away so the pairing keeps its rhythm;
+ * the Ratings only ever come back from the server.
+ */
+export function resolveFinalDuel(winner: string, loser: string, mode: Mode = ui.mode) {
+  const id = session.id;
+  const final = session.final;
+  if (id === null || final === null) return;
+
+  const counts = final.modes[mode].duels;
+  counts[winner] = (counts[winner] ?? 0) + 1;
+  counts[loser] = (counts[loser] ?? 0) + 1;
+
+  finalDuels = finalDuels.then(async () => {
+    try {
+      session.final = await postFinalDuel(id, mode, winner, loser);
+    } catch (error) {
+      connection.refused =
+        error instanceof Error ? error.message : "Ce duel n'a pas été enregistré.";
+    }
+  });
+}
+
+export function finalRatingOf(prenom: string, mode: Mode = ui.mode): number {
+  return session.final?.modes[mode].ratings[prenom] ?? START_RATING;
+}
+
+export function finalDuelsOf(prenom: string, mode: Mode = ui.mode): number {
+  return session.final?.modes[mode].duels[prenom] ?? 0;
 }

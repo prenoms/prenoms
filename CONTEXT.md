@@ -22,7 +22,7 @@ the list is built; the counts themselves are not shipped.
 _Avoid_: Gender, sex (unqualified)
 
 **Prénom List**:
-The `data/prenoms.csv` file — firstname, male, female. The single source of truth
+The `frontend/data/prenoms.csv` file — firstname, male, female. The single source of truth
 for what exists in the app. Generated from INSEE, then extended by hand.
 _Avoid_: Database, dataset, dictionary
 

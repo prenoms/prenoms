@@ -1,5 +1,13 @@
-.ruff_cache/
-node_modules/
-dist/
+# Local config and secrets: the FTP credentials for the OVH deploy.
+.env
 
+# Dependencies and build output
+node_modules/
+frontend/dist/
+
+# Local Session files (`just run-backend-local`) and the deploy staging tree.
 .prenoms-data/
+.deploy/
+
+.ruff_cache/
+.DS_Store

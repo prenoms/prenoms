@@ -2,7 +2,7 @@
 
 /**
  * Unit tests for the pure parts of the API: id validation, the Elo port and the
- * merge. Run with `php server/tests/unit.php`. No Composer, so no PHPUnit —
+ * merge. Run with `just test-backend`. No Composer, so no PHPUnit —
  * assertions are three helper functions and an exit code.
  */
 

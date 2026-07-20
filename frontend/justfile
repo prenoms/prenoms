@@ -1,0 +1,23 @@
+# List available recipes (default when you run `just` with no arguments)
+default:
+    @just --list
+
+# Install the toolchain. Every recipe below depends on this.
+install:
+    pnpm install
+
+# Run the Svelte dev server on http://127.0.0.1:5173 (proxies /api to :8888)
+dev: install
+    pnpm dev
+
+# Type-check every .svelte and .ts file against tsconfig.json.
+check: install
+    pnpm run check
+
+# Type-check, then the state-layer tests on node --test.
+test: check
+    pnpm test
+
+# Static build into dist/.
+build: install
+    pnpm build

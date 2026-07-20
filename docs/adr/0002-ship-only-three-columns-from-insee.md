@@ -11,7 +11,7 @@ user's Nom) is the whole experience.
 ## Consequences
 
 - **No curves, no maps, no rankings.** There is no detail view to build and no
-  large data payload to ship or shard. `data/prenoms.csv` is a few thousand rows.
+  large data payload to ship or shard. `frontend/data/prenoms.csv` is a few thousand rows.
 - **INSEE is a seed, not a backbone.** The generated list is deliberately editable:
   `tools/build_prenoms.py` preserves any Prénom present in the CSV that INSEE does
   not produce, so hand-added names survive regeneration.

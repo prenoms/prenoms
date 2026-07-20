@@ -1,13 +1,17 @@
 # Prénoms
 
-A browser-only tool that helps expectant parents explore French first names and
-narrow them down to a shortlist, using INSEE birth-registration data as the
+A tool that helps two expectant parents explore French first names and narrow
+them down to a shortlist together, using INSEE birth-registration data as the
 factual backbone.
 
-There is no account, no server and no database. Every judgement you make lives in
-your browser's local storage and never leaves the device.
+Each parent judges privately in their own **Profile** inside a shared
+**Session**; when both declare themselves **ready**, the two Shortlists merge
+into a **Final Profile** they rank together. There are no accounts and no
+passwords — the Session link is the only key, and holding it is the whole
+authorisation story. See
+[ADR 0003](docs/adr/0003-sessions-on-a-php-backend.md).
 
-**Live:** https://prenoms.github.io/prenoms/
+**Live:** https://quelprenom.xyz
 
 ## What it does
 
@@ -22,7 +26,7 @@ Three views work on that Deck:
 
 One Prénom at a time, keep or reject. The order is shuffled once per Mode and
 stays stable across reloads, so you always resume where you left off. The last
-few judgements can be undone within the session.
+few judgements can be undone until you leave the page.
 
 ### Parcourir — search and star
 
@@ -42,24 +46,28 @@ than trusted.
 ### Everything else
 
 - **Nom (optional)** — supply a family name and it is rendered after every
-  Prénom, so you can judge the full name aloud. Shared across both Modes, never
-  sent anywhere.
-- **Export / import** — download your judgements and ratings as JSON, or merge a
-  file back in on another device. Importing merges, it never replaces: the
-  merged shortlist is the union of both sides, so a Prénom your partner kept is
-  repêché even if you rejected it, and the two of you settle it in the Duels.
-  Only their keeps travel — a Prénom they rejected and you never saw stays
-  unjudged, waiting for you in your own deck.
-  This is the only backup; clearing site data destroys everything.
+  Prénom, so you can judge the full name aloud. It belongs to the Session, so it
+  is shared across both Modes and both Profiles, and either parent may set it.
+- **Nothing is stored on your device.** No local storage, no export file to
+  remember to make. The Session lives on the server and the link reaches it from
+  any device — which also means losing the link loses the Session for good.
+- **Your partner's Verdicts stay hidden** until the merge. You can see whether
+  they are ready and nothing else; seeing their Shortlist while you were still
+  swiping would make the final Duels theatre.
+- **The merge is a union, not a match.** A Prénom your partner kept is in the
+  Final Profile even if you rejected it — a rejection is a statement about your
+  own list, not a veto over theirs. All earlier Ratings are discarded and
+  everything starts level, because a Rating only means something against the
+  Shortlist it was earned in.
 - **Two independent Shortlists**, one per Mode. There is never a combined one.
 
 ## The data
 
-`data/prenoms.csv` is the single source of truth for what exists in the app —
-about 3,200 rows of `firstname,male,female` and nothing else. It is generated
-from INSEE's *fichier des prénoms* by `tools/build_prenoms.py`, which uses a
-century of birth counts to decide which Prénoms are worth showing and how the
-male/female flags are set, then throws the counts away. The app ships no
+`frontend/data/prenoms.csv` is the single source of truth for what exists in the
+app — about 3,200 rows of `firstname,male,female` and nothing else. It is
+generated from INSEE's *fichier des prénoms* by `tools/build_prenoms.py`, which
+uses a century of birth counts to decide which Prénoms are worth showing and how
+the male/female flags are set, then throws the counts away. The app ships no
 popularity data and has no charts — see
 [ADR 0002](docs/adr/0002-ship-only-three-columns-from-insee.md).
 
@@ -68,34 +76,71 @@ The file is meant to be hand-edited: regenerating it preserves any Prénom you
 added that INSEE does not produce.
 
 ```bash
-./tools/build_prenoms.py                      # download from insee.fr and rebuild
-./tools/build_prenoms.py --input nat2023.zip  # use a local copy
-./tools/check_prenoms.py                      # validate + sort in place
-./tools/check_prenoms.py --check              # validate only (used in CI)
+just build-data                         # download from insee.fr and rebuild
+just build-data --input nat2023.zip     # use a local copy
+./tools/check_prenoms.py                # validate + sort in place
+just check-data                         # validate only (used in CI)
 ```
 
 Both scripts are `uv` single-file scripts with no dependencies.
 
-## Development
+## Layout
 
-```bash
-pnpm install
-pnpm dev       # vite dev server
-pnpm build     # static build into dist/
-pnpm preview   # serve the build
-pnpm check     # svelte-check
+```
+frontend/     Svelte 5 (runes) + TypeScript + Vite, no runtime dependencies
+backend/      the Session API: plain PHP 8.1, no framework, no Composer, no DB
+e2e/          the staged tree, served the way Apache will serve it
+tools/        the Prénom List builders, plus stage.sh and deploy.sh
+docs/         architecture, testing, deployment, and the ADRs
+justfile      every workflow: run, test, build, deploy
+root.htaccess deployed as www/.htaccess — /api → PHP, everything else → the app
+ovhconfig     deployed as .ovhconfig — pins the PHP version
 ```
 
-Svelte 5 (runes) + TypeScript + Vite, no runtime dependencies. Pushing to `main`
-builds and deploys to GitHub Pages via `.github/workflows/deploy.yml`.
+## Development
+
+Requires PHP 8.1+, Node 24+, pnpm, [just](https://just.systems), and `uv` for
+the data scripts (`lftp` too, if you deploy).
+
+```bash
+just                    # list every recipe
+just run-frontend-local # vite on 127.0.0.1:5173, proxying /api to the PHP below
+just run-backend-local  # php -S on 127.0.0.1:8888, Sessions in ./.prenoms-data
+just test               # frontend + backend + data, and the build
+just e2e                # the deployed shape, end to end
+```
+
+The API is documented endpoint by endpoint in
+[`backend/README.md`](backend/README.md); how the halves fit together is
+[docs/architecture.md](docs/architecture.md), and what each test layer is for is
+[docs/testing.md](docs/testing.md).
+
+## Deployment
+
+Apache + PHP 8 on OVH shared hosting, no database and no cron. `just deploy`
+runs the checks, builds, stages exactly what the web root should contain and
+mirrors it over FTPS. It is run by hand — the FTP credentials reach every
+Session on the host, so they stay off CI.
+
+```bash
+just init-env         # .env from the example, then fill in the OVH credentials
+just deploy --dry-run # show what would change
+just deploy
+just smoke-prod       # assert the live site works
+```
+
+The remote layout, why the data directory sits outside the web root, and what
+never ships: [docs/deployment.md](docs/deployment.md).
 
 ## Further reading
 
 - [`CONTEXT.md`](CONTEXT.md) — the domain language. Prénom, Deck, Verdict,
   Shortlist, Duel, Rating and the ambiguities they resolve. Read this before
   touching the code.
-- [ADR 0001](docs/adr/0001-no-backend-static-hosting.md) — why there is no
-  backend, and what that costs (no live matching between partners, no
-  cross-user statistics).
+- [`CLAUDE.md`](CLAUDE.md) — the hard constraints and conventions, in short.
+- [ADR 0001](docs/adr/0001-no-backend-static-hosting.md) — superseded: why
+  there was no backend, and what that cost.
 - [ADR 0002](docs/adr/0002-ship-only-three-columns-from-insee.md) — why only
   three columns of INSEE data reach the browser.
+- [ADR 0003](docs/adr/0003-sessions-on-a-php-backend.md) — why Sessions moved to
+  a server, why the link is the only key, and why the merge re-duels from zero.

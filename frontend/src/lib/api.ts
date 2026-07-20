@@ -1,5 +1,5 @@
 /**
- * The Session API, one function per endpoint (`server/README.md`). Plain
+ * The Session API, one function per endpoint (`../../../backend/README.md`). Plain
  * `fetch` and no reactivity: the state module owns the cache, this owns the
  * wire. Authorisation is possession of the Session id and nothing else, so
  * there is nothing to attach to a request beyond the ids in the path.
@@ -92,7 +92,14 @@ export function normaliseId(raw: string): string {
   return raw.trim().toUpperCase();
 }
 
-export const ID_PATTERN = /^[0-9ABCDEFGHJKMNPQRSTVWXYZ]{10}$/;
+/**
+ * Crockford base32 — no I, L, O or U, so nothing is misread aloud. Exported
+ * because the router needs the same alphabet, and one id rule spelled twice is
+ * one id rule that will eventually disagree with itself.
+ */
+export const ID_ALPHABET = "0-9ABCDEFGHJKMNPQRSTVWXYZ";
+
+export const ID_PATTERN = new RegExp(`^[${ID_ALPHABET}]{10}$`);
 
 export type ModeState = {
   /** Drives the stable Deck shuffle in Cartes. */
