@@ -3,14 +3,15 @@
   import {
     deck,
     duelsOf,
-    persisted,
+    profile,
     ratingOf,
     resolveDuel,
     session,
     setView,
+    ui,
   } from "../lib/state.svelte";
 
-  const mode = $derived(persisted.modes[session.mode]);
+  const mode = $derived(profile.modes[ui.mode]);
 
   /** The Shortlist, with each Prénom's Rating and Duel count. All derived. */
   const contenders = $derived<Contender[]>(
@@ -83,7 +84,7 @@
           <li>
             <span class="place"></span>
             <span class="prenom"
-              >{prenom}{#if persisted.nom}&nbsp;<span class="nom">{persisted.nom}</span>{/if}</span
+              >{prenom}{#if session.nom}&nbsp;<span class="nom">{session.nom}</span>{/if}</span
             >
             {#if provisional.has(prenom)}<span class="badge">à confirmer</span>{/if}
             <span class="rating">{Math.round(rating)}</span>
@@ -96,7 +97,7 @@
         {#each pair as prenom (prenom)}
           <button class="contender" onclick={() => pick(prenom)}>
             <span class="prenom">{prenom}</span>
-            {#if persisted.nom}<span class="nom">{persisted.nom}</span>{/if}
+            {#if session.nom}<span class="nom">{session.nom}</span>{/if}
             {#if provisional.has(prenom)}<span class="badge">à confirmer</span>{/if}
           </button>
         {/each}

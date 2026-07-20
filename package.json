@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:data": "python3 tools/check_prenoms.py --check",
+    "test": "node --import ./tools/node-test-setup.mjs --test \"src/lib/*.test.ts\"",
     "test:api": "php server/tests/unit.php && php server/tests/api.php",
     "dev:api": "PRENOMS_DATA_DIR=.prenoms-data php -S 127.0.0.1:8080 server/index.php"
   },
@@ -22,6 +23,7 @@
   "type": "module",
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@types/node": "^26.1.1",
     "svelte": "^5.56.6",
     "svelte-check": "^4.7.3",
     "typescript": "^5.9.3",

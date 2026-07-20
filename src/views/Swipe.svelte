@@ -1,12 +1,20 @@
 <script lang="ts">
   import type { Verdict } from "../lib/domain";
   import { seededShuffle } from "../lib/shuffle";
-  import { clearVerdict, deck, persisted, session, setVerdict, setView } from "../lib/state.svelte";
+  import {
+    clearVerdict,
+    deck,
+    profile,
+    session,
+    setVerdict,
+    setView,
+    ui,
+  } from "../lib/state.svelte";
 
   const SWIPE_THRESHOLD = 90;
   const UNDO_DEPTH = 10;
 
-  const mode = $derived(persisted.modes[session.mode]);
+  const mode = $derived(profile.modes[ui.mode]);
 
   /** Stable across sessions: same seed, same Deck order. */
   const shuffled = $derived(seededShuffle(deck.current, mode.seed));
@@ -109,7 +117,7 @@
           onpointercancel={onpointerup}
         >
           <span class="prenom">{card.prenom}</span>
-          {#if persisted.nom}<span class="nom">{persisted.nom}</span>{/if}
+          {#if session.nom}<span class="nom">{session.nom}</span>{/if}
 
           <span class="stamp keep" class:visible={intent === "keep"}>Gardé</span>
           <span class="stamp reject" class:visible={intent === "reject"}>Rejeté</span>
@@ -137,7 +145,7 @@
         <p>Votre Shortlist — {shortlist.length} Prénom{shortlist.length > 1 ? "s" : ""} :</p>
         <ul>
           {#each shortlist as { prenom } (prenom)}
-            <li>{prenom}{#if persisted.nom}&nbsp;<span class="nom">{persisted.nom}</span>{/if}</li>
+            <li>{prenom}{#if session.nom}&nbsp;<span class="nom">{session.nom}</span>{/if}</li>
           {/each}
         </ul>
         {#if shortlist.length >= 2}

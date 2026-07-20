@@ -1,13 +1,13 @@
 <script lang="ts">
   import { fold, score } from "../lib/fuzzy";
-  import { deck, persisted, session, setVerdict, clearVerdict } from "../lib/state.svelte";
+  import { deck, profile, ui, setVerdict, clearVerdict } from "../lib/state.svelte";
 
   let query = $state("");
 
   /** Whether the list shows the whole Deck or just this Mode's Shortlist. */
   let scope = $state<"deck" | "shortlist">("deck");
 
-  const verdicts = $derived(persisted.modes[session.mode].verdicts);
+  const verdicts = $derived(profile.modes[ui.mode].verdicts);
 
   // The Deck folded once per Mode, so typing does not re-fold 1700 strings a keystroke.
   const folded = $derived(deck.current.map((p) => ({ ...p, folded: fold(p.prenom) })));

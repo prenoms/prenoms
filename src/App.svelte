@@ -1,13 +1,25 @@
 <script lang="ts">
   import { MODES, type Mode } from "./lib/domain";
-  import { persisted, session, setMode, setNom, setView, type View } from "./lib/state.svelte";
+  import {
+    bootstrapFromQuery,
+    session,
+    setMode,
+    setNom,
+    setView,
+    status,
+    ui,
+    type View,
+  } from "./lib/state.svelte";
   import Browse from "./views/Browse.svelte";
   import Swipe from "./views/Swipe.svelte";
   import Game from "./views/Game.svelte";
-  import Backup from "./components/Backup.svelte";
+  import Banner from "./components/Banner.svelte";
 
   const MODE_LABEL: Record<Mode, string> = { male: "Masculin", female: "Féminin" };
   const VIEW_LABEL: Record<View, string> = { browse: "Parcourir", swipe: "Cartes", game: "Duels" };
+
+  // TEMPORARY — Phase 3 replaces this with routing on `/s/{id}` and a join screen.
+  const addressed = bootstrapFromQuery();
 </script>
 
 <header>
@@ -16,8 +28,8 @@
   <nav class="modes" aria-label="Mode">
     {#each MODES as mode (mode)}
       <button
-        class:active={session.mode === mode}
-        aria-pressed={session.mode === mode}
+        class:active={ui.mode === mode}
+        aria-pressed={ui.mode === mode}
         onclick={() => setMode(mode)}>{MODE_LABEL[mode]}</button
       >
     {/each}
@@ -26,8 +38,8 @@
   <nav class="views" aria-label="Vue">
     {#each Object.entries(VIEW_LABEL) as [view, label] (view)}
       <button
-        class:active={session.view === view}
-        aria-current={session.view === view ? "page" : undefined}
+        class:active={ui.view === view}
+        aria-current={ui.view === view ? "page" : undefined}
         onclick={() => setView(view as View)}>{label}</button
       >
     {/each}
@@ -36,7 +48,7 @@
   <input
     class="nom"
     type="text"
-    value={persisted.nom ?? ""}
+    value={session.nom ?? ""}
     oninput={(event) => setNom(event.currentTarget.value)}
     placeholder="Nom (optionnel)"
     autocomplete="family-name"
@@ -45,24 +57,37 @@
 </header>
 
 <main>
-  <!-- Keyed on the Mode: switching swaps the whole working set, so rebuild rather
-       than diff — it also drops per-Mode view state like the undo stack. -->
-  {#if session.view === "browse"}
-    {#key session.mode}
-      <Browse />
-    {/key}
-  {:else if session.view === "swipe"}
-    {#key session.mode}
-      <Swipe />
-    {/key}
+  <!-- The Session lives on the server, so there is nothing to show until it has
+       arrived: an unloaded Profile looks exactly like one that has judged nothing. -->
+  {#if !addressed}
+    <p class="notice">
+      Aucune session. Ouvrez le lien de votre session — Phase&nbsp;3 ajoutera l'accueil et l'écran
+      d'entrée.
+    </p>
+  {:else if status.phase === "error"}
+    <p class="notice">{status.message}</p>
+  {:else if status.phase !== "ready"}
+    <p class="notice">Chargement de la session…</p>
   {:else}
-    {#key session.mode}
-      <Game />
-    {/key}
+    <!-- Keyed on the Mode: switching swaps the whole working set, so rebuild rather
+         than diff — it also drops per-Mode view state like the undo stack. -->
+    {#if ui.view === "browse"}
+      {#key ui.mode}
+        <Browse />
+      {/key}
+    {:else if ui.view === "swipe"}
+      {#key ui.mode}
+        <Swipe />
+      {/key}
+    {:else}
+      {#key ui.mode}
+        <Game />
+      {/key}
+    {/if}
   {/if}
 </main>
 
-<Backup />
+<Banner />
 
 <style>
   header {
@@ -118,6 +143,14 @@
   .nom:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+
+  .notice {
+    max-width: 32rem;
+    margin: 3rem auto;
+    padding: 0 1.25rem;
+    text-align: center;
+    color: var(--ink-soft);
   }
 
 </style>
