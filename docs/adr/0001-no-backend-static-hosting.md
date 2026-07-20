@@ -1,5 +1,12 @@
 # No backend — the app is static and runs entirely in the browser
 
+> **Superseded by [ADR 0003](0003-sessions-on-a-php-backend.md).** Losing a
+> browser's local storage lost everything, and export/import was a defence nobody
+> used in time. Judgements now live in a server-side Session. The frontend is
+> still a static build, as anticipated below — but on PHP 8 hosting rather than
+> Cloudflare, and the "no live matching" and "clearing site data destroys
+> everything" consequences no longer hold.
+
 Choosing a baby name is something two people do together, so the obvious design is
 an account system with live matching between partners. We rejected it: this app is
 hosted on GitHub Pages at zero cost and will stay that way, so there is no server,

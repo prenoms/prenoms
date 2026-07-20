@@ -7,7 +7,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "check:data": "python3 tools/check_prenoms.py --check"
+    "check:data": "python3 tools/check_prenoms.py --check",
+    "test:api": "php server/tests/unit.php && php server/tests/api.php",
+    "dev:api": "PRENOMS_DATA_DIR=.prenoms-data php -S 127.0.0.1:8080 server/index.php"
   },
   "license": "ISC",
   "devEngines": {
