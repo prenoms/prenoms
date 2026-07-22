@@ -1,62 +1,44 @@
 <script lang="ts">
-  import { choosePair, isProvisional, type Contender, type Pair } from "../lib/duel";
+  import { duelOrder, type Duel } from "../lib/bracket";
 
   /**
    * One Duel on screen: two Prénoms from the same Shortlist, resolved by
-   * picking one, nothing eliminated. Shared by the per-Profile phase (`Game`)
-   * and the Final Profile (`Final`) because the Duel is the same act in both —
-   * what differs is whose Ratings move, and that is the caller's business:
-   * `onpick` reports the fact and nothing else.
+   * picking one. Shared by the per-Profile phase (`Game`) and the Final Profile
+   * (`Final`) because the Duel is the same act in both — what differs is whose
+   * Ranking it settles, and that is the caller's business: `onpick` reports the
+   * fact and nothing else.
+   *
+   * Which Duel to ask is never decided here. It comes from the Bracket, which
+   * is the only thing that knows who has met whom and which node of the tree is
+   * still waiting on an answer.
    */
   let {
-    contenders,
+    duel,
     nom = null,
     onpick,
   }: {
-    contenders: Contender[];
+    duel: Duel;
     nom?: string | null;
     onpick: (winner: string, loser: string) => void;
   } = $props();
 
-  let pair = $state<Pair | null>(null);
-
-  /**
-   * Pairing is deliberately not derived: a Duel must not re-roll when a Rating
-   * changes underneath it. It is picked once, then again after each Duel.
-   */
-  function nextPair(avoid: Pair | null = null) {
-    pair = choosePair(contenders, Math.random, avoid);
-  }
-
-  $effect(() => {
-    // Re-pair when the Shortlist itself changes shape, not when Ratings move.
-    const size = contenders.length;
-    if (size < 2) pair = null;
-    else if (pair === null || pair.some((p) => !contenders.some((c) => c.prenom === p))) nextPair();
-  });
-
-  const provisional = $derived(new Set(contenders.filter(isProvisional).map((c) => c.prenom)));
+  // One side of the tree would otherwise always be the left-hand card.
+  const shown = $derived(duelOrder(duel));
 
   function pick(winner: string) {
-    if (!pair) return;
-    const loser = pair[0] === winner ? pair[1] : pair[0];
-    onpick(winner, loser);
-    nextPair(pair);
+    onpick(winner, shown[0] === winner ? shown[1] : shown[0]);
   }
 </script>
 
-{#if pair}
-  <p class="prompt">Lequel préférez-vous ?</p>
-  <div class="duel">
-    {#each pair as prenom (prenom)}
-      <button class="contender" onclick={() => pick(prenom)}>
-        <span class="prenom">{prenom}</span>
-        {#if nom}<span class="nom">{nom}</span>{/if}
-        {#if provisional.has(prenom)}<span class="badge">à confirmer</span>{/if}
-      </button>
-    {/each}
-  </div>
-{/if}
+<p class="prompt">Lequel préférez-vous ?</p>
+<div class="duel">
+  {#each shown as prenom (prenom)}
+    <button class="contender" onclick={() => pick(prenom)}>
+      <span class="prenom">{prenom}</span>
+      {#if nom}<span class="nom">{nom}</span>{/if}
+    </button>
+  {/each}
+</div>
 
 <style>
   .prompt {
@@ -96,13 +78,4 @@
     color: var(--ink-soft);
   }
 
-  .badge {
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 0.1rem 0.5rem;
-  }
 </style>

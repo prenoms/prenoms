@@ -23,12 +23,12 @@ just test-backend       # php -l, unit tests, then the API tests on a throwaway 
 | `GET` | `/api/sessions/{id}` | The join screen's view: Profiles, their ready state, whether the Session has merged, and the Final Profile once it has. Never another Profile's Verdicts. |
 | `PUT` | `/api/sessions/{id}/nom` | `{nom}` — Session-level, either Profile may set it. Blank clears it. |
 | `POST` | `/api/sessions/{id}/profiles` | `{name}` — claim a Profile. Max two, names unique within the Session. |
-| `GET` | `/api/sessions/{id}/profiles/{pid}` | That Profile's own state: seed, Verdicts, Ratings, Duel counts, both Modes. |
+| `GET` | `/api/sessions/{id}/profiles/{pid}` | That Profile's own state: seed, Verdicts, Bracket, both Modes. |
 | `PUT` | `/api/sessions/{id}/profiles/{pid}/verdicts/{mode}/{prenom}` | `{verdict}` — `keep` or `reject`. Idempotent, so a retry is free. |
 | `DELETE` | `/api/sessions/{id}/profiles/{pid}/verdicts/{mode}/{prenom}` | Clear the Verdict. |
-| `PUT` | `/api/sessions/{id}/profiles/{pid}/ratings/{mode}` | `{ratings, duels}` — the per-Profile Ranking, written whole. The client computes it (`frontend/src/lib/duel.ts`); the server only stores it. |
+| `PUT` | `/api/sessions/{id}/profiles/{pid}/bracket/{mode}` | `{bracket}` — the per-Profile tournament, written whole. The client plays it (`frontend/src/lib/bracket.ts`); the server only stores it, after `clean_bracket()` checks the tree still indexes into the draw. |
 | `POST` | `/api/sessions/{id}/profiles/{pid}/ready` | Irreversible. Merges the Session in the same locked write if every Profile is then ready. |
-| `POST` | `/api/sessions/{id}/final/duels` | `{mode, winner, loser}` — the **server** computes the Elo, inside the lock, so two simultaneous picks both count. |
+| `POST` | `/api/sessions/{id}/final/duels` | `{mode, winner, loser}` — the **server** applies it to the shared tree, inside the lock, so two simultaneous picks both count. A Duel the tree is not waiting on is a `409`. |
 
 Errors are `{error, message}` with a French `message` fit to show a user:
 `400` malformed, `404` no such Session or Profile, `409` the Session's state

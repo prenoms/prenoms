@@ -35,8 +35,8 @@
    * writing a reject, so the Prénom returns to the swipe Deck unjudged.
    */
   function toggleStar(prenom: string) {
-    if (verdicts[prenom] === "keep") clearVerdict(prenom);
-    else setVerdict(prenom, "keep");
+    if (verdicts[prenom] === "keep") clearVerdict(ui.mode, prenom);
+    else setVerdict(ui.mode, prenom, "keep");
   }
 </script>
 

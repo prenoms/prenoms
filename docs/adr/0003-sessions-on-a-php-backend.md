@@ -67,18 +67,25 @@ other rejected. This is the rule the old import already used, and the reasoning 
 unchanged — a name your partner loves is not disposed of by your swipe, it is
 argued about. The Duels are where that argument happens.
 
-All per-Profile Ratings are discarded at the merge and every Prénom in the Final
-Profile starts equal. Averaging the two Rankings was tempting and is unsound: a
-Rating is meaningful only against the Shortlist it was earned in, so your 1520 and
-your partner's 1520 are not the same number, and a name only one of you kept has a
-Rating from one side only. The per-Profile Duels were never wasted — they are how
-each of you decided what to bring.
+All per-Profile results are discarded at the merge and the Final Profile is drawn
+afresh. Combining the two was tempting and is unsound: a result is meaningful only
+against the field it was won in, and a name only one of you kept was never in the
+other's at all. The per-Profile Duels were never wasted — they are how each of you
+decided what to bring.
 
-Both partners then duel one shared Rating, so Elo is computed **by the server**,
-inside the lock, from a `{winner, loser}` fact. A client-side computation would
-drop a Duel whenever both people picked at the same moment. The cost is that the
-Elo math exists twice; we contain it by making PHP the sole owner of Final Profile
-Ratings and `src/lib/duel.ts` the sole owner of the per-Profile phase.
+Both partners then play one shared tournament, so a Duel is resolved **by the
+server**, inside the lock, from a `{winner, loser}` fact. A client-side resolution
+would drop a Duel whenever both people picked at the same moment. The cost is that
+the rules exist twice; we contain it by making PHP the sole owner of the Final
+Profile's tournament and `src/lib/bracket.ts` the sole owner of the per-Profile
+phase.
+
+> **Note, later:** this section originally described Elo Ratings, which is what
+> the ranking was when this ADR was written. The ranking is now a Bracket played
+> to a Top 5 — see [`CONTEXT.md`](../../CONTEXT.md). Nothing about the decision
+> recorded here changed: the concurrency argument above is why the server resolves
+> Final Profile Duels, and it held for Elo exactly as it holds for a tournament
+> tree.
 
 ## Ready is irreversible, and that is the sharp edge
 

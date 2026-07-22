@@ -47,7 +47,7 @@
     if (!card) return;
     lastDirection = verdict === "keep" ? 1 : -1;
     undoStack = [card.prenom, ...undoStack].slice(0, UNDO_DEPTH);
-    setVerdict(card.prenom, verdict);
+    setVerdict(ui.mode, card.prenom, verdict);
     dx = 0;
     dragging = false;
   }
@@ -60,7 +60,7 @@
     const [previous, ...rest] = undoStack;
     if (previous === undefined) return;
     undoStack = rest;
-    clearVerdict(previous);
+    clearVerdict(ui.mode, previous);
     dx = 0;
   }
 

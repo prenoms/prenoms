@@ -34,8 +34,8 @@ touching anything — the domain language is precise and the code uses it — an
   boundary.
 - Session writes are read-modify-write under `flock(LOCK_EX)`. Anything that
   must not lose a concurrent update happens **inside** the lock, server-side
-  (this is why the Final Profile's Elo is computed in PHP and the per-Profile
-  one is not).
+  (this is why the Final Profile's Duels are resolved in PHP and the
+  per-Profile ones are not).
 - Bind `127.0.0.1`, never `localhost` — see [docs/testing.md](docs/testing.md).
 - `frontend/data/prenoms.csv` is generated *and* hand-edited. Regenerate with
   `just build-data`; it preserves rows INSEE does not produce.

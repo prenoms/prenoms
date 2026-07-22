@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/ids.php';
-require_once __DIR__ . '/lib/elo.php';
+require_once __DIR__ . '/lib/bracket.php';
 require_once __DIR__ . '/lib/session.php';
 require_once __DIR__ . '/lib/store.php';
 
@@ -58,16 +58,6 @@ function require_prenom(string $prenom): string
     return $prenom;
 }
 
-/** Locates a Profile inside a Session, or fails the request. */
-function &profile_at(array &$session, string $profileId): array
-{
-    $index = find_profile($session, $profileId);
-    if ($index === null) {
-        throw new NotFound("profile");
-    }
-    return $session['profiles'][$index];
-}
-
 function handle(string $method, array $path): never
 {
     if ($path === [] || $path[0] !== 'sessions') {
@@ -109,31 +99,15 @@ function handle(string $method, array $path): never
         if (mb_strlen($nom) > 60) {
             throw new BadRequest("Nom trop long.");
         }
-        $session = with_session($id, function (array $session) use ($nom): array {
-            $session['nom'] = $nom === '' ? null : $nom;
-            return $session;
-        });
-        send_json(session_view($session));
+        send_json(session_view(with_session($id, fn(array $s): array => set_nom($s, $nom))));
     }
 
     // POST /api/sessions/{id}/profiles — claim a Profile by naming it.
     if ($rest === ['profiles'] && $method === 'POST') {
-        $name = body_string(read_body(), 'name');
-        $created = null;
-        with_session($id, function (array $session) use ($name, &$created): array {
-            if (has_merged($session)) {
-                throw new Conflict("Cette session est terminée : on ne peut plus la rejoindre.");
-            }
-            if (count($session['profiles']) >= MAX_PROFILES) {
-                throw new Conflict("Cette session a déjà deux profils.");
-            }
-            if (has_profile_name($session, $name)) {
-                throw new Conflict("Ce prénom de profil est déjà pris dans cette session.");
-            }
-            $created = empty_profile($name);
-            $session['profiles'][] = $created;
-            return $session;
-        });
+        // Built here so the response can answer with the Profile rather than
+        // the Session; `add_profile()` decides whether it may join at all.
+        $created = empty_profile(body_string(read_body(), 'name'));
+        with_session($id, fn(array $s): array => add_profile($s, $created));
         send_json(profile_view($created), 201);
     }
 
@@ -143,27 +117,11 @@ function handle(string $method, array $path): never
         $mode = require_mode((string) ($body['mode'] ?? ''));
         $winner = require_prenom(body_string($body, 'winner', 40));
         $loser = require_prenom(body_string($body, 'loser', 40));
-        if ($winner === $loser) {
-            throw new BadRequest("Un Prénom ne peut pas se battre contre lui-même.");
-        }
-        $session = with_session($id, function (array $session) use ($mode, $winner, $loser): array {
-            if (!has_merged($session)) {
-                throw new Conflict("La session n'a pas encore fusionné.");
-            }
-            $final = &$session['final']['modes'][$mode];
-            foreach ([$winner, $loser] as $prenom) {
-                if (!isset($final['ratings'][$prenom])) {
-                    throw new BadRequest("« $prenom » n'est pas dans cette liste.");
-                }
-            }
-            // Computed here, inside the lock: two simultaneous picks both count.
-            $adjusted = adjust((float) $final['ratings'][$winner], (float) $final['ratings'][$loser]);
-            $final['ratings'][$winner] = $adjusted['winner'];
-            $final['ratings'][$loser] = $adjusted['loser'];
-            $final['duels'][$winner] = ($final['duels'][$winner] ?? 0) + 1;
-            $final['duels'][$loser] = ($final['duels'][$loser] ?? 0) + 1;
-            return $session;
-        });
+        // The Duel is applied inside the lock, so two simultaneous picks both count.
+        $session = with_session(
+            $id,
+            fn(array $s): array => record_final_duel($s, $mode, $winner, $loser),
+        );
         send_json(final_view($session['final']));
     }
 
@@ -179,22 +137,12 @@ function handle(string $method, array $path): never
         if ($session === null) {
             throw new NotFound("session");
         }
-        send_json(profile_view(profile_at($session, $profileId)));
+        send_json(profile_view($session['profiles'][require_profile($session, $profileId)]));
     }
 
     // POST /api/sessions/{id}/profiles/{pid}/ready — irreversible, and it may merge.
     if ($sub === ['ready'] && $method === 'POST') {
-        $session = with_session($id, function (array $session) use ($profileId): array {
-            $profile = &profile_at($session, $profileId);
-            $profile['ready'] = true;
-            unset($profile);
-            // The merge happens in the same locked write, so a Session can never
-            // sit with every Profile ready and no Final Profile.
-            if (all_ready($session) && !has_merged($session)) {
-                $session = merge_session($session);
-            }
-            return $session;
-        });
+        $session = with_session($id, fn(array $s): array => declare_ready($s, $profileId));
         send_json(session_view($session));
     }
 
@@ -211,61 +159,29 @@ function handle(string $method, array $path): never
         } elseif ($method !== 'DELETE') {
             throw new BadRequest("Méthode non autorisée.");
         }
-        with_session($id, function (array $session) use ($profileId, $mode, $prenom, $verdict): array {
-            if (has_merged($session)) {
-                throw new Conflict("La session a fusionné : le tri est terminé.");
-            }
-            $profile = &profile_at($session, $profileId);
-            if ($profile['ready'] === true) {
-                throw new Conflict("Ce profil a déjà déclaré avoir terminé.");
-            }
-            // Keyed by (Profile, Mode, Prénom), so a retry is free.
-            if ($verdict === null) {
-                unset($profile['modes'][$mode]['verdicts'][$prenom]);
-            } else {
-                $profile['modes'][$mode]['verdicts'][$prenom] = $verdict;
-            }
-            return $session;
-        });
+        with_session(
+            $id,
+            fn(array $s): array => record_verdict($s, $profileId, $mode, $prenom, $verdict),
+        );
         send_no_content();
     }
 
     /*
-     * PUT /api/sessions/{id}/profiles/{pid}/ratings/{mode} — the per-Profile
-     * Ratings and Duel counts for one Mode, written whole.
-     *
-     * Unlike the Final Profile, the maths is not done here: `src/lib/duel.ts`
-     * owns the per-Profile phase, including `syncRatings`' enter-at-the-median
-     * rule, and only one person ever writes these numbers, so there is no
-     * simultaneous-pick problem to solve. The server just stores what it is given.
+     * PUT /api/sessions/{id}/profiles/{pid}/bracket/{mode} — the per-Profile
+     * Bracket for one Mode, written whole. Every Prénom in the body is checked
+     * here; `clean_bracket()` is what makes sure the tree still indexes into the
+     * draw, and `replace_bracket()` what the Session permits.
      */
-    if (count($sub) === 2 && $sub[0] === 'ratings' && $method === 'PUT') {
+    if (count($sub) === 2 && $sub[0] === 'bracket' && $method === 'PUT') {
         $mode = require_mode($sub[1]);
-        $body = read_body();
-        $ratings = [];
-        $duels = [];
-        foreach (($body['ratings'] ?? []) as $prenom => $rating) {
-            if (!is_numeric($rating)) {
-                throw new BadRequest("Note invalide.");
-            }
-            $ratings[require_prenom((string) $prenom)] = (float) $rating;
+        $bracket = read_body()['bracket'] ?? null;
+        if (!is_array($bracket) || !is_array($bracket['field'] ?? null)) {
+            throw new BadRequest("Tournoi invalide.");
         }
-        foreach (($body['duels'] ?? []) as $prenom => $count) {
-            $prenom = require_prenom((string) $prenom);
-            if (!is_int($count) || $count < 0 || !isset($ratings[$prenom])) {
-                throw new BadRequest("Compteur de duels invalide.");
-            }
-            $duels[$prenom] = $count;
+        foreach ($bracket['field'] as $prenom) {
+            require_prenom((string) $prenom);
         }
-        with_session($id, function (array $session) use ($profileId, $mode, $ratings, $duels): array {
-            if (has_merged($session)) {
-                throw new Conflict("La session a fusionné : le tri est terminé.");
-            }
-            $profile = &profile_at($session, $profileId);
-            $profile['modes'][$mode]['ratings'] = $ratings;
-            $profile['modes'][$mode]['duels'] = $duels;
-            return $session;
-        });
+        with_session($id, fn(array $s): array => replace_bracket($s, $profileId, $mode, $bracket));
         send_no_content();
     }
 

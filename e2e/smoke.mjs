@@ -59,7 +59,18 @@ check("verdict round-trips", prof.modes.female.verdicts.Jeanne === "keep");
 
 const ready = await fetch(`${B}/${id}/profiles/${pid}/ready`, { method: "POST" });
 const merged = await ready.json();
-check("ready merges a lone Profile", merged.merged === true && merged.final.modes.female.ratings.Jeanne === 1000);
+check(
+  "ready merges a lone Profile and draws its Bracket",
+  merged.merged === true && merged.final.modes.female.bracket.field.join() === "Jeanne",
+);
+
+// A field of one has nobody to duel: the Place is awarded unopposed, which is
+// also the only Final Profile state this smoke can reach without playing along.
+const duel = await fetch(`${B}/${id}/final/duels`, {
+  method: "POST",
+  ...j({ mode: "female", winner: "Jeanne", loser: "Zoe" }),
+});
+check("a Duel the tree is not waiting on is a JSON 409", duel.status === 409);
 
 const nf = await fetch(`${B}/ZZZZZZZZZZ`);
 check("unknown Session is a JSON 404", nf.status === 404 && (await nf.json()).error === "not_found");

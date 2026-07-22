@@ -35,13 +35,22 @@ matching (typing `zoe` finds Zoé). Star a Prénom to keep it; un-star to clear 
 judgement entirely, which returns it to the swipe Deck unjudged. The list can be
 scoped to the Deck or to your Shortlist alone.
 
-### Duels — rank your shortlist
+### Duels — a tournament for your Top 5
 
-Head-to-head matches between two Prénoms from your Shortlist. Nothing is ever
-eliminated: each pick adjusts an Elo Rating, and the Ranking sharpens the more
-Duels you play. Pairs are drawn from Prénoms of similar Rating so the matchups
-stay meaningful, and names with too few Duels are flagged *à confirmer* rather
-than trusted.
+Your Shortlist is drawn into a single-elimination Bracket and played out:
+*lequel préférez-vous ?*, over and over, until it has a winner. The winner is
+then lifted out and only its path is replayed to find the second, and so on to
+the fifth.
+
+It **ends**, and you can see the end from the start: a Shortlist of forty costs
+around sixty Duels, not the several hundred that ordering the whole list would.
+Below the Podium the field is shown as one unordered set, because a Prénom
+knocked out in round one by the eventual winner was told nothing about how it
+compares to one knocked out in round one by anybody else — putting those two in
+an order would be inventing a Duel you never played.
+
+Keeping a new Prénom mid-tournament does not slip it into a round it never
+played; the screen offers a fresh Draw and you decide.
 
 ### Everything else
 
@@ -56,9 +65,9 @@ than trusted.
   swiping would make the final Duels theatre.
 - **The merge is a union, not a match.** A Prénom your partner kept is in the
   Final Profile even if you rejected it — a rejection is a statement about your
-  own list, not a veto over theirs. All earlier Ratings are discarded and
-  everything starts level, because a Rating only means something against the
-  Shortlist it was earned in.
+  own list, not a veto over theirs. Both earlier Brackets are discarded and one
+  is drawn afresh, because half the union was never in either draw and a Place
+  only means something against the field it was won in.
 - **Two independent Shortlists**, one per Mode. There is never a combined one.
 
 ## The data
@@ -94,7 +103,6 @@ tools/        the Prénom List builders, plus stage.sh and deploy.sh
 docs/         architecture, testing, deployment, and the ADRs
 justfile      every workflow: run, test, build, deploy
 root.htaccess deployed as www/.htaccess — /api → PHP, everything else → the app
-ovhconfig     deployed as .ovhconfig — pins the PHP version
 ```
 
 ## Development
@@ -135,7 +143,7 @@ never ships: [docs/deployment.md](docs/deployment.md).
 ## Further reading
 
 - [`CONTEXT.md`](CONTEXT.md) — the domain language. Prénom, Deck, Verdict,
-  Shortlist, Duel, Rating and the ambiguities they resolve. Read this before
+  Shortlist, Bracket, Duel, Place and the ambiguities they resolve. Read this before
   touching the code.
 - [`CLAUDE.md`](CLAUDE.md) — the hard constraints and conventions, in short.
 - [ADR 0001](docs/adr/0001-no-backend-static-hosting.md) — superseded: why

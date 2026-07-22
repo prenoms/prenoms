@@ -48,15 +48,9 @@ e2e:
 
 # ------------------------------------------------------------------- ship
 
-# `deploy` and the e2e smoke both go through this, so what is tested is what
-# ships.
-# Static build into frontend/dist/.
-[working-directory('frontend')]
 build:
-    just build
+    cd frontend && just build
 
-# Run by hand, never from CI: the credentials reach every Session on the host.
-# Mirror the staged tree onto OVH over FTPS (--dry-run to preview).
 deploy *args:
     tools/deploy.sh {{ args }}
 

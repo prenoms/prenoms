@@ -21,7 +21,7 @@ just smoke-prod        # assert the live site actually works
    here stops the deploy.
 3. `just build` into `frontend/dist/`.
 4. `tools/stage.sh .deploy` — assembles a directory that **is** the web root.
-5. Uploads `ovhconfig` as `.ovhconfig` at the FTP root, then mirrors `.deploy/`
+5. mirrors `.deploy/`
    onto `www/` over FTPS with `--delete`, after a confirmation prompt (`--yes`
    skips it).
 
@@ -37,7 +37,6 @@ host.
 
 ```
 /home/xxx/              FTP home
-├── .ovhconfig          pins PHP 8.3 (from ./ovhconfig)
 ├── www/                DocumentRoot for quelprenom.xyz — the mirror target
 │   ├── index.html      the Svelte app; Cache-Control: no-cache
 │   ├── assets/         fingerprinted js/css/csv, immutable for a year
@@ -75,7 +74,3 @@ assembling a tree rather than pushing files piecemeal.
 
 Sessions untouched for twelve months are unlinked. The host has no cron, so the
 sweep rides on writes, roughly one in a hundred.
-
-The PHP version is pinned in `ovhconfig`: 8.1 is the floor (the API uses `never`
-return types), and pinning stops a host-side default moving under a site whose
-CI does not run against it. CI tests on 8.3, the version pinned there.

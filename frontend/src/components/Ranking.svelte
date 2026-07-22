@@ -1,29 +1,57 @@
 <script lang="ts">
-  import { isProvisional, type Contender } from "../lib/duel";
+  import { isDecided, placesWanted, unranked, type BracketState } from "../lib/bracket";
 
   /**
-   * The Shortlist ordered by Rating. Readable at any time, sharper the more
-   * Duels have been played, never final — hence the badge on the Prénoms that
-   * have not been in enough of them to have earned their place yet.
+   * The podium: the Places the tournament has actually awarded, in order. There
+   * is no score beside a Prénom because there is no score — a Place is a
+   * tournament somebody won, and a number would invite reading a gap between
+   * two Prénoms that nobody ever measured.
+   *
+   * Everything below the podium is shown as one unordered set, deliberately.
+   * The Prénom knocked out in round one by the eventual winner was told nothing
+   * about how it compares to the one knocked out in round one by anybody else,
+   * and putting the two in a list would claim otherwise.
    */
-  let { contenders, nom = null }: { contenders: Contender[]; nom?: string | null } = $props();
+  let { bracket, nom = null }: { bracket: BracketState; nom?: string | null } = $props();
 
-  const ranking = $derived(contenders.slice().sort((a, b) => b.rating - a.rating));
-  const provisional = $derived(new Set(contenders.filter(isProvisional).map((c) => c.prenom)));
+  const rest = $derived(unranked(bracket).sort((a, b) => a.localeCompare(b, "fr")));
+  const wanted = $derived(placesWanted(bracket));
 </script>
 
 <ol class="ranking">
-  {#each ranking as { prenom, rating } (prenom)}
+  {#each bracket.places as prenom (prenom)}
     <li>
       <span class="place"></span>
       <span class="prenom"
         >{prenom}{#if nom}&nbsp;<span class="nom">{nom}</span>{/if}</span
       >
-      {#if provisional.has(prenom)}<span class="badge">à confirmer</span>{/if}
-      <span class="rating">{Math.round(rating)}</span>
     </li>
   {/each}
 </ol>
+
+{#if !isDecided(bracket)}
+  <p class="progress">
+    {bracket.places.length} place{bracket.places.length > 1 ? "s" : ""} sur {wanted} attribuée{bracket.places
+      .length > 1
+      ? "s"
+      : ""}.
+  </p>
+{/if}
+
+{#if rest.length > 0}
+  <div class="rest">
+    <h3>Les autres</h3>
+    <p class="note">
+      Sans ordre : le tournoi ne les a pas départagés entre eux, et prétendre le contraire serait
+      inventer des duels qui n'ont pas eu lieu.
+    </p>
+    <ul>
+      {#each rest as prenom (prenom)}
+        <li>{prenom}</li>
+      {/each}
+    </ul>
+  </div>
+{/if}
 
 <style>
   .ranking {
@@ -33,7 +61,7 @@
     margin: 1.25rem 0 0;
   }
 
-  li {
+  .ranking li {
     counter-increment: place;
     display: flex;
     align-items: baseline;
@@ -57,20 +85,30 @@
     color: var(--ink-soft);
   }
 
-  .badge {
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  .progress,
+  .note {
+    font-size: 0.85rem;
+    line-height: 1.5;
     color: var(--ink-soft);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 0.1rem 0.5rem;
   }
 
-  .rating {
-    margin-left: auto;
-    font-variant-numeric: tabular-nums;
+  .rest {
+    margin-top: 2rem;
+  }
+
+  .rest h3 {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: var(--ink-soft);
-    font-size: 0.9rem;
+    margin: 0 0 0.35rem;
+  }
+
+  .rest ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+    columns: 2;
+    line-height: 1.9;
   }
 </style>

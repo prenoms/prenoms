@@ -47,7 +47,7 @@ Profile.
 _Avoid_: Room, account, workspace, game
 
 **Profile**:
-One person within a Session. Owns their own Verdicts, Ratings and Duel counts, in
+One person within a Session. Owns their own Verdicts and their own Bracket, in
 both Modes. Claimed by picking a name from the Session's Profile list — there is no
 password, and the device remembers nothing between visits.
 _Avoid_: User, player, account, partner
@@ -60,8 +60,8 @@ _Avoid_: Done, finished, locked, submitted
 
 **Final Profile**:
 What a Session becomes at the merge: the union of every Prénom any Profile kept,
-with all earlier Ratings discarded, duelled by both parents against one shared
-Rating. There is one Final Profile per Session, holding one Shortlist per Mode.
+with all earlier Brackets discarded and one drawn afresh, played by both parents
+together. There is one Final Profile per Session, holding one Shortlist per Mode.
 _Avoid_: Result, merged profile, combined shortlist, winner
 
 ### Choosing
@@ -91,23 +91,36 @@ _Avoid_: Favourites, saved names, picks
 
 ### Ranking
 
+**Bracket**:
+The single-elimination tournament a Shortlist is played as. Drawn once over the
+whole Shortlist, then played out; it ends. Before the merge a Bracket is private to
+one Profile; in the Final Profile both parents play the same one.
+_Avoid_: Ladder, league, bracketology
+
+**Draw**:
+The act of putting a Shortlist into a Bracket, and the arrangement it produces. It
+decides who meets whom, and it is random — never alphabetical, never the order
+someone happened to star things in. Always deliberate: a Prénom kept after the Draw
+waits for the next one rather than being slipped into a tournament under way.
+_Avoid_: Seeding, bracket order, shuffle
+
 **Duel**:
-A single head-to-head between two Prénoms from the same Shortlist, resolved by
-picking one. Nothing is eliminated. Before the merge a Duel is private to one
-Profile; in the Final Profile both parents play into the same Ratings.
+A single head-to-head between two Prénoms that have met in the Bracket, resolved by
+picking one. The loser is out of the running for the Place being decided. Before
+the merge a Duel is private to one Profile; in the Final Profile both parents play
+into the same tree.
 _Avoid_: Match, battle, round, vote
 
-**Rating**:
-A Prénom's strength within one Shortlist, adjusted after every Duel it takes part
-in. Meaningful only relative to the other Prénoms in that same Shortlist — two
-Profiles' Ratings are not comparable, which is why the merge discards them all and
-starts the Final Profile level.
-_Avoid_: Score, elo, points
+**Place**:
+A position on the Podium — first, second, and so on. A Prénom has one only once the
+Bracket has awarded it. There is no number attached and no Place for most of the
+field: a Place is a tournament won, not a score every Prénom carries.
+_Avoid_: Rating, score, elo, points, rank
 
-**Ranking**:
-The Shortlist ordered by Rating. Readable at any time, sharper the more Duels have
-been played, never final.
-_Avoid_: Leaderboard, results, standings
+**Podium**:
+The Places a Bracket has awarded, in order, up to five. Everything below it is the
+rest of the field, deliberately unordered.
+_Avoid_: Leaderboard, results, standings, ranking (for the whole list)
 
 ## Flagged ambiguities
 
@@ -127,13 +140,21 @@ _Avoid_: Leaderboard, results, standings
   there is no such thing as a Prénom being "matched".
 - **Ready is per Profile and covers both Modes.** There is no readiness for a
   single Mode: you finish masculine and feminine, or you are not ready.
-- **The Final Profile is a Profile, not a report.** It has Shortlists, Ratings and
-  Duels like any other, and it is the only one both parents write to.
+- **The Final Profile is a Profile, not a report.** It has Shortlists, a Bracket
+  and Duels like any other, and it is the only one both parents write to.
 - **A Prénom is identified by its string.** There are no numeric ids — the Prénom
   List is hand-edited, so row position is not stable and must never be an identity.
 - **Starring and swiping right are one concept.** Both record a keep Verdict. The
   browse list and the swipe deck are two ways into the same judgement, not two
   separate collections.
+- **Most of the field has no Place, and that is the point.** Only the Podium is
+  ordered. A Prénom knocked out in round one by the eventual winner was told
+  nothing about how it compares to one knocked out in round one by anybody else,
+  so the two are shown as one unordered set rather than in some order the Duels
+  never established.
+- **The Draw is never implicit.** Keeping a new Prénom does not enter it into a
+  Bracket already being played, because it would arrive in a round it never
+  played. The screen offers a fresh Draw; the user decides.
 - **Prénoms are unaccented.** INSEE treats Zoé, Zoe and Zoë as three names; we treat
   them as one, written without accents. Spelling variants are not distinct Prénoms.
 
@@ -169,11 +190,20 @@ _Avoid_: Leaderboard, results, standings
 > and they mean you never had to rank a name you didn't like. A rejection is a
 > statement about your list, not a veto over theirs.
 >
-> **Dev**: And my Ratings carry over into the final Duels?
+> **Dev**: And my Podium carries over into the final Duels?
 >
-> **Domain expert**: No. Everything starts level. Your 1600 was earned against your
-> names and theirs against theirs — the numbers don't mean the same thing, so
-> putting them in one table would be inventing a comparison that was never played.
+> **Domain expert**: No. The Bracket is drawn again. Your tournament was played
+> over your names and theirs over theirs — half the union was never in either
+> draw, so carrying a Place across would seed this one on results that were never
+> about these opponents.
+>
+> **Dev**: Then why only five Places? Why not order the whole list?
+>
+> **Domain expert**: Because you'd be answering questions for an hour to order
+> names you already know you don't want. Five is the part of the list you'll
+> actually argue about. Below that, the tournament genuinely hasn't been told
+> which of two names you prefer, and I'd rather show them side by side than make
+> up an order.
 >
 > **Dev**: Can I see how far they've got before I hit ready?
 >

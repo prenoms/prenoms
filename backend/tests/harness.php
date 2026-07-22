@@ -41,6 +41,27 @@ function assert_equals(mixed $expected, mixed $actual, string $message = ''): vo
     }
 }
 
+/**
+ * Asserts that an operation refuses. The message matters as much as the class:
+ * every one of them can end up in front of a user, so a rule that fires with
+ * the wrong sentence is a bug, not a detail.
+ */
+function assert_throws(string $class, callable $body, string $messageContains = ''): void
+{
+    try {
+        $body();
+    } catch (Throwable $e) {
+        if (!($e instanceof $class)) {
+            throw new RuntimeException("expected $class, got " . get_class($e) . ": {$e->getMessage()}");
+        }
+        if ($messageContains !== '' && !str_contains($e->getMessage(), $messageContains)) {
+            throw new RuntimeException("expected a message containing '$messageContains', got '{$e->getMessage()}'");
+        }
+        return;
+    }
+    throw new RuntimeException("expected $class, but nothing was thrown");
+}
+
 /** Floats compared with a tolerance, since Ratings are never integers for long. */
 function assert_close(float $expected, float $actual, float $epsilon = 1e-9): void
 {

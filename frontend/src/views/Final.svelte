@@ -1,34 +1,21 @@
 <script lang="ts">
-  import type { Contender } from "../lib/duel";
+  import { duelsLeft, isDecided, placesWanted } from "../lib/bracket";
   import DuelBoard from "../components/DuelBoard.svelte";
   import Ranking from "../components/Ranking.svelte";
-  import {
-    finalDuelsOf,
-    finalRatingOf,
-    resolveFinalDuel,
-    session,
-    ui,
-  } from "../lib/state.svelte";
+  import { finalBracketOf, finalDuelFor, resolveFinalDuel, session, ui } from "../lib/state.svelte";
 
   /**
-   * The Final Profile: one Shortlist per Mode, one shared Rating, both parents
-   * playing into it. `Swipe` and `Browse` are per-Profile and end at the merge —
-   * there are no Verdicts here, only Duels.
+   * The Final Profile: one Shortlist per Mode, one shared tournament, both
+   * parents playing it. `Swipe` and `Browse` are per-Profile and end at the
+   * merge — there are no Verdicts here, only Duels.
    *
-   * The Shortlist is the Rating map's key set: the merge gave every Prénom
-   * either parent kept a Rating, and nothing else has one.
+   * The draw is the server's, made at the merge, and the two parents are handed
+   * different Duels from it: early rounds hold many independent matches, so
+   * neither waits on the other and no answer is thrown away (ADR 0003).
    */
-  const contenders = $derived<Contender[]>(
-    Object.keys(session.final?.modes[ui.mode].ratings ?? {})
-      .sort((a, b) => a.localeCompare(b, "fr"))
-      .map((prenom) => ({
-        prenom,
-        rating: finalRatingOf(prenom),
-        duels: finalDuelsOf(prenom),
-      })),
-  );
-
-  const duelsPlayed = $derived(contenders.reduce((total, c) => total + c.duels, 0) / 2);
+  const bracket = $derived(finalBracketOf(ui.mode));
+  const duel = $derived(finalDuelFor(ui.mode));
+  const left = $derived(duelsLeft(bracket));
 
   type Tab = "duel" | "ranking" | "list";
   const TABS: { id: Tab; label: string }[] = [
@@ -39,18 +26,23 @@
   let tab = $state<Tab>("duel");
 </script>
 
+
+
 <div class="final">
   <p class="lede">
-    Les deux profils ont terminé. Cette liste réunit tout ce que l'un <em>ou</em> l'autre a gardé, à
-    égalité au départ : c'est ici que vous la départagez, ensemble.
+    Les deux profils ont terminé. Cette liste réunit tout ce que l'un <em>ou</em> l'autre a gardé,
+    tiré au sort en tournoi : c'est ici que vous jouez les duels, ensemble, jusqu'au Top {placesWanted(
+      bracket,
+    )}. Chacun sa question, et le nombre de duels est fini.
   </p>
 
-  {#if contenders.length === 0}
+  {#if bracket.field.length === 0}
     <p class="empty">Aucun Prénom gardé dans ce Deck. Essayez l'autre Mode.</p>
   {:else}
     <div class="head">
       <p class="tally">
-        {duelsPlayed} duel{duelsPlayed > 1 ? "s" : ""} · {contenders.length} Prénoms
+        {bracket.played} duel{bracket.played > 1 ? "s" : ""} · {bracket.field.length} Prénoms
+        {#if left > 0}· encore {left} au plus{/if}
       </p>
       <nav aria-label="Vue de la liste finale">
         {#each TABS as { id, label } (id)}
@@ -62,18 +54,23 @@
     </div>
 
     {#if tab === "duel"}
-      {#if contenders.length < 2}
-        <p class="empty">Il faut au moins deux Prénoms pour un duel.</p>
+      {#if isDecided(bracket)}
+        <p class="empty">
+          Le tournoi est joué. Votre Top {placesWanted(bracket)} est dans l'onglet Classement.
+        </p>
+      {:else if duel === null}
+        <p class="empty">Rien à départager de votre côté pour l'instant.</p>
       {:else}
-        <!-- Only the fact is reported: the Elo is the server's, computed inside
-             the lock, so two parents picking at once both count (ADR 0003). -->
-        <DuelBoard {contenders} nom={session.nom} onpick={resolveFinalDuel} />
+        <!-- Only the fact is reported: the Place it settles is the server's,
+             worked out inside the lock, so two parents picking at once both
+             count (ADR 0003). -->
+        <DuelBoard {duel} nom={session.nom} onpick={(winner, loser) => resolveFinalDuel(ui.mode, winner, loser)} />
       {/if}
     {:else if tab === "ranking"}
-      <Ranking {contenders} nom={session.nom} />
+      <Ranking {bracket} nom={session.nom} />
     {:else}
       <ul class="list">
-        {#each contenders as { prenom } (prenom)}
+        {#each [...bracket.field].sort((a, b) => a.localeCompare(b, "fr")) as prenom (prenom)}
           <li>{prenom}</li>
         {/each}
       </ul>

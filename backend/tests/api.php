@@ -198,19 +198,43 @@ test('one Profile never sees another Profile Verdicts', function () {
     assert_equals(2, count($view['profiles']));
 });
 
-// --- Per-Profile Ratings ---------------------------------------------------
+// --- The per-Profile Bracket -----------------------------------------------
 
-test('per-Profile Ratings are stored as the client computed them', function () {
+test('a per-Profile Bracket is stored as the client played it', function () {
     $id = create_session_over_http();
     $pid = join_as($id, 'Alex');
-    $response = request('PUT', "/api/sessions/$id/profiles/$pid/ratings/female", [
-        'ratings' => ['Jeanne' => 1016.0, 'Zoe' => 984.0],
-        'duels' => ['Jeanne' => 1, 'Zoe' => 1],
+    $response = request('PUT', "/api/sessions/$id/profiles/$pid/bracket/female", [
+        'bracket' => [
+            'field' => ['Jeanne', 'Zoe'],
+            'size' => 2,
+            'winners' => [null, 0],
+            'gone' => [0],
+            'places' => ['Jeanne'],
+            'played' => 1,
+        ],
     ]);
     assert_equals(204, $response['status']);
-    $profile = request('GET', "/api/sessions/$id/profiles/$pid")['body'];
-    assert_equals(1016.0, $profile['modes']['female']['ratings']['Jeanne']);
-    assert_equals(1, $profile['modes']['female']['duels']['Zoe']);
+    $bracket = request('GET', "/api/sessions/$id/profiles/$pid")['body']['modes']['female']['bracket'];
+    assert_equals(['Jeanne', 'Zoe'], $bracket['field']);
+    assert_equals(['Jeanne'], $bracket['places']);
+    assert_equals(1, $bracket['played']);
+});
+
+test('a Bracket whose tree does not match its draw is refused or cleaned, never trusted', function () {
+    $id = create_session_over_http();
+    $pid = join_as($id, 'Alex');
+
+    $bad = request('PUT', "/api/sessions/$id/profiles/$pid/bracket/female", [
+        'bracket' => ['field' => ['Jeanne', 'Bobby/../../etc']],
+    ]);
+    assert_equals(400, $bad['status'], 'a Prénom that is not one is refused outright');
+
+    request('PUT', "/api/sessions/$id/profiles/$pid/bracket/female", [
+        'bracket' => ['field' => ['Jeanne', 'Zoe'], 'winners' => [null, 42], 'places' => ['Paul']],
+    ]);
+    $bracket = request('GET', "/api/sessions/$id/profiles/$pid")['body']['modes']['female']['bracket'];
+    assert_equals(null, $bracket['winners'][1], 'an index outside the draw is dropped');
+    assert_equals([], $bracket['places'], 'a Place for a Prénom that was never drawn is dropped');
 });
 
 // --- Ready and the merge ---------------------------------------------------
@@ -243,11 +267,11 @@ test('the Session merges when the last Profile declares itself ready', function 
 
     assert_equals(true, $merged['merged']);
     // The union: Zoe is in although Alex rejected it.
-    $female = array_keys((array) $merged['final']['modes']['female']['ratings']);
+    $female = $merged['final']['modes']['female']['bracket']['field'];
     sort($female);
     assert_equals(['Jeanne', 'Zoe'], $female);
-    assert_equals(['Paul'], array_keys((array) $merged['final']['modes']['male']['ratings']));
-    assert_equals(1000.0, $merged['final']['modes']['female']['ratings']['Jeanne']);
+    assert_equals(['Paul'], $merged['final']['modes']['male']['bracket']['field']);
+    assert_equals([], $merged['final']['modes']['female']['bracket']['places'], 'the draw starts level');
 });
 
 test('a Session with a single Profile merges as soon as that Profile is ready', function () {
@@ -256,7 +280,7 @@ test('a Session with a single Profile merges as soon as that Profile is ready', 
     request('PUT', "/api/sessions/$id/profiles/$pid/verdicts/female/Jeanne", ['verdict' => 'keep']);
     $merged = request('POST', "/api/sessions/$id/profiles/$pid/ready")['body'];
     assert_equals(true, $merged['merged']);
-    assert_equals(['Jeanne'], array_keys((array) $merged['final']['modes']['female']['ratings']));
+    assert_equals(['Jeanne'], $merged['final']['modes']['female']['bracket']['field']);
 });
 
 test('ready cannot be undone, and swiping stops for the whole Session', function () {
@@ -272,7 +296,7 @@ test('ready cannot be undone, and swiping stops for the whole Session', function
 
 // --- Final Profile Duels ---------------------------------------------------
 
-test('the server computes the Elo adjustment for a Final Profile Duel', function () {
+test('the server resolves a Final Profile Duel and awards the Places', function () {
     $id = create_session_over_http();
     $pid = join_as($id, 'Alex');
     request('PUT', "/api/sessions/$id/profiles/$pid/verdicts/female/Jeanne", ['verdict' => 'keep']);
@@ -285,9 +309,10 @@ test('the server computes the Elo adjustment for a Final Profile Duel', function
         'loser' => 'Zoe',
     ]);
     assert_equals(200, $final['status']);
-    assert_equals(1016.0, $final['body']['modes']['female']['ratings']['Jeanne']);
-    assert_equals(984.0, $final['body']['modes']['female']['ratings']['Zoe']);
-    assert_equals(1, $final['body']['modes']['female']['duels']['Jeanne']);
+    $bracket = $final['body']['modes']['female']['bracket'];
+    assert_equals(1, $bracket['played']);
+    // A field of two fills both Places: the winner, then the other unopposed.
+    assert_equals(['Jeanne', 'Zoe'], $bracket['places']);
 });
 
 test('a Duel needs two different Prénoms that are both in the Shortlist', function () {
@@ -298,8 +323,9 @@ test('a Duel needs two different Prénoms that are both in the Shortlist', funct
     $duels = "/api/sessions/$id/final/duels";
 
     assert_equals(400, request('POST', $duels, ['mode' => 'female', 'winner' => 'Jeanne', 'loser' => 'Jeanne'])['status']);
-    assert_equals(400, request('POST', $duels, ['mode' => 'female', 'winner' => 'Jeanne', 'loser' => 'Zoe'])['status']);
     assert_equals(400, request('POST', $duels, ['mode' => 'neutral', 'winner' => 'Jeanne', 'loser' => 'Zoe'])['status']);
+    // Zoe was never drawn, so no node of the tree is waiting on that Duel.
+    assert_equals(409, request('POST', $duels, ['mode' => 'female', 'winner' => 'Jeanne', 'loser' => 'Zoe'])['status']);
 });
 
 test('a Duel before the merge is a conflict — there is no Final Profile yet', function () {
@@ -313,25 +339,41 @@ test('a Duel before the merge is a conflict — there is no Final Profile yet', 
     assert_equals(409, $response['status']);
 });
 
-test('concurrent Duels are not lost — the Elo runs inside the lock', function () {
-    global $port;
+test('every Duel of a round lands — each is applied inside the lock', function () {
     $id = create_session_over_http();
     $pid = join_as($id, 'Alex');
-    foreach (['Jeanne', 'Zoe'] as $prenom) {
+    $field = ['Alice', 'Bruno', 'Chloe', 'David', 'Emma', 'Felix', 'Gaby', 'Hugo'];
+    foreach ($field as $prenom) {
         request('PUT', "/api/sessions/$id/profiles/$pid/verdicts/female/$prenom", ['verdict' => 'keep']);
     }
     request('POST', "/api/sessions/$id/profiles/$pid/ready");
 
-    // Both parents pick at the same moment, ten times over.
-    for ($i = 0; $i < 10; $i++) {
-        request('POST', "/api/sessions/$id/final/duels", [
-            'mode' => 'female', 'winner' => 'Jeanne', 'loser' => 'Zoe',
+    // The first round is four independent Duels — this is exactly what the two
+    // parents are handed at once, and none of them may overwrite another.
+    $bracket = request('GET', "/api/sessions/$id")['body']['final']['modes']['female']['bracket'];
+    $round = first_round_of($bracket);
+    assert_equals(4, count($round), 'a field of eight opens with four Duels');
+
+    foreach ($round as [$winner, $loser]) {
+        $response = request('POST', "/api/sessions/$id/final/duels", [
+            'mode' => 'female', 'winner' => $winner, 'loser' => $loser,
         ]);
+        assert_equals(200, $response['status']);
     }
-    $final = request('GET', "/api/sessions/$id")['body']['final'];
-    assert_equals(10, $final['modes']['female']['duels']['Jeanne']);
-    assert_true($final['modes']['female']['ratings']['Jeanne'] > 1100.0, 'ten wins should move the Rating');
+
+    $final = request('GET', "/api/sessions/$id")['body']['final']['modes']['female']['bracket'];
+    assert_equals(4, $final['played'], 'not one of the four was lost to another');
 });
+
+/** The Duels a freshly drawn Bracket opens with, read off the draw. */
+function first_round_of(array $bracket): array
+{
+    $duels = [];
+    for ($i = 0; $i + 1 < count($bracket['field']); $i += 2) {
+        $duels[] = [$bracket['field'][$i], $bracket['field'][$i + 1]];
+    }
+    return $duels;
+}
 
 // --- Routing ---------------------------------------------------------------
 

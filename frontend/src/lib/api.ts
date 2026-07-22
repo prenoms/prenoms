@@ -6,6 +6,7 @@
  */
 
 import type { Mode, Verdict } from "./domain";
+import type { BracketState } from "./bracket";
 
 /** The server's `error` field, plus the one failure it cannot report itself. */
 export type ErrorCode = "bad_request" | "not_found" | "conflict" | "server_error" | "network";
@@ -106,10 +107,8 @@ export type ModeState = {
   seed: number;
   /** Keyed by the Prénom string — never a row index, the CSV is hand-edited. */
   verdicts: Record<string, Verdict>;
-  /** Shortlist only. */
-  ratings: Record<string, number>;
-  /** Duels played per Prénom, for provisionality. */
-  duels: Record<string, number>;
+  /** The tournament over the Shortlist, and the Places it has awarded. */
+  bracket: BracketState;
 };
 
 /** A Profile's own state. Returned only to whoever asked for it by id. */
@@ -123,8 +122,8 @@ export type ProfileState = {
 /** What the Session will say about a Profile to anyone holding the link. */
 export type ProfileSummary = { id: string; name: string; ready: boolean };
 
-/** The Final Profile: one Shortlist per Mode, one shared Rating, no Verdicts. */
-export type FinalState = { modes: Record<Mode, { ratings: Record<string, number>; duels: Record<string, number> }> };
+/** The Final Profile: one Bracket per Mode, played by both parents, no Verdicts. */
+export type FinalState = { modes: Record<Mode, { bracket: BracketState }> };
 
 /**
  * The Session as the join screen may see it. Never another Profile's Verdicts —
@@ -192,23 +191,22 @@ export async function deleteVerdict(
 }
 
 /**
- * One Mode's Ratings and Duel counts, written whole. `duel.ts` owns this maths
- * for the per-Profile phase; the server only stores the numbers.
+ * One Mode's Bracket, written whole. `bracket.ts` owns the rules for the
+ * per-Profile phase; the server only stores the state.
  */
-export async function putRatings(
+export async function putBracket(
   id: string,
   profileId: string,
   mode: Mode,
-  ratings: Record<string, number>,
-  duels: Record<string, number>,
+  bracket: BracketState,
 ): Promise<void> {
-  await request(`${base}/${id}/profiles/${profileId}/ratings/${mode}`, {
+  await request(`${base}/${id}/profiles/${profileId}/bracket/${mode}`, {
     method: "PUT",
     // `keepalive` so the flush on pagehide actually leaves: a tab being unloaded
     // has its ordinary fetches cancelled, which would drop the last Duels of a
-    // session in silence. A Shortlist of Ratings is far inside the 64 KB limit.
+    // session in silence. One Shortlist's tree is far inside the 64 KB limit.
     keepalive: true,
-    ...json({ ratings, duels }),
+    ...json({ bracket }),
   });
 }
 
@@ -218,9 +216,9 @@ export async function declareReady(id: string, profileId: string): Promise<Sessi
 }
 
 /**
- * A Final Profile Duel. The Elo is the server's, computed inside the lock, so
- * two parents picking at the same moment both count (ADR 0003). Never compute
- * it here.
+ * A Final Profile Duel. What it settles is the server's, worked out inside the
+ * lock, so two parents picking at the same moment both count (ADR 0003). Never
+ * resolve it here.
  */
 export async function postFinalDuel(
   id: string,
