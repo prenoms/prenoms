@@ -21,6 +21,22 @@ attribute of a Prénom, never part of its identity. Derived from birth counts wh
 the list is built; the counts themselves are not shipped.
 _Avoid_: Gender, sex (unqualified)
 
+**Prénom composé**:
+A Prénom written in two parts joined by a hyphen — Jean-Baptiste, Marie-Lou. The
+hyphen is the only mark: the Prénom List holds no spaces and no apostrophes.
+_Avoid_: Double name, hyphenated name, compound
+
+**Prénom mixte**:
+A Prénom whose Sex Profile carries both sexes, so it sits in both Decks —
+Camille. It is one Prénom, judged separately in each Mode.
+_Avoid_: Unisexe, épicène, neutral, ambiguous
+
+**Filtre**:
+The criteria of form that reduce what Parcourir shows — number of letters, number
+of syllables, whether composés and mixtes are visible. It hides; it does not
+judge, and it belongs to the screen rather than to the Session.
+_Avoid_: Tri, sort, search, selection
+
 **Prénom List**:
 The `frontend/data/prenoms.csv` file — firstname, male, female. The single source of truth
 for what exists in the app. Generated from INSEE, then extended by hand.
@@ -155,6 +171,14 @@ _Avoid_: Leaderboard, results, standings, ranking (for the whole list)
 - **The Draw is never implicit.** Keeping a new Prénom does not enter it into a
   Bracket already being played, because it would arrive in a round it never
   played. The screen offers a fresh Draw; the user decides.
+- **The Filtre removes nothing from the Deck.** A Prénom it hides is still in
+  the Cartes, still carries whatever Verdict it had, and still counts in the Deck
+  and Shortlist tallies. Only "N affichés" follows the Filtre. Hiding is not
+  rejecting, and nobody's Shortlist changes because a slider moved.
+- **Syllables are counted, not recorded.** The Prénom List ships three columns
+  and no syllable count; the number comes from a heuristic in the browser
+  (`src/lib/syllables.ts`) that is right for most Prénoms and wrong for a few.
+  It filters, and it is never shown as a fact about a Prénom.
 - **Prénoms are unaccented.** INSEE treats Zoé, Zoe and Zoë as three names; we treat
   them as one, written without accents. Spelling variants are not distinct Prénoms.
 

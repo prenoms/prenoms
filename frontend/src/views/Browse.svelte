@@ -1,19 +1,39 @@
 <script lang="ts">
+  import FilterPanel from "../components/FilterPanel.svelte";
   import { fold, score } from "../lib/fuzzy";
-  import { deck, profile, ui, setVerdict, clearVerdict } from "../lib/state.svelte";
+  import { activeCount, bounds, matches, measure } from "../lib/prenom-filter";
+  import {
+    deck,
+    filter,
+    profile,
+    resetFilter,
+    ui,
+    setVerdict,
+    clearVerdict,
+  } from "../lib/state.svelte";
 
   let query = $state("");
 
   /** Whether the list shows the whole Deck or just this Mode's Shortlist. */
   let scope = $state<"deck" | "shortlist">("deck");
 
+  /** Whether the Filter panel is unfolded. The Filter itself outlives it. */
+  let filtering = $state(false);
+
   const verdicts = $derived(profile.modes[ui.mode].verdicts);
 
-  // The Deck folded once per Mode, so typing does not re-fold 1700 strings a keystroke.
-  const folded = $derived(deck.current.map((p) => ({ ...p, folded: fold(p.prenom) })));
+  // The Deck folded and measured once per Mode, so neither typing nor dragging a
+  // slider re-walks 1700 strings.
+  const folded = $derived(deck.current.map((p) => ({ ...measure(p), folded: fold(p.prenom) })));
+
+  const ends = $derived(bounds(folded));
+  const active = $derived(activeCount(filter));
+
+  // The Filter comes before the scope toggle, so it narrows the Shortlist too.
+  const filtered = $derived(active === 0 ? folded : folded.filter((p) => matches(p, filter)));
 
   const scoped = $derived(
-    scope === "shortlist" ? folded.filter((p) => verdicts[p.prenom] === "keep") : folded,
+    scope === "shortlist" ? filtered.filter((p) => verdicts[p.prenom] === "keep") : filtered,
   );
 
   const results = $derived.by(() => {
@@ -62,14 +82,29 @@
         aria-pressed={scope === "shortlist"}
         onclick={() => (scope = "shortlist")}>Shortlist {shortlistSize}</button
       >
+      <button
+        class:active={active > 0}
+        aria-expanded={filtering}
+        aria-controls="filter-panel"
+        onclick={() => (filtering = !filtering)}>Filtrer{active > 0 ? ` ${active}` : ""}</button
+      >
       <p class="tally">{results.length} affichés</p>
     </div>
+
+    {#if filtering}
+      <div id="filter-panel">
+        <FilterPanel bounds={ends} />
+      </div>
+    {/if}
   </div>
 
   {#if results.length === 0}
     <p class="empty">
       {#if query.trim() !== ""}
         Aucun Prénom ne correspond à « {query.trim()} ».
+      {:else if active > 0}
+        Aucun Prénom ne passe le filtre.
+        <button class="undo" onclick={resetFilter}>Tout réinitialiser</button>
       {:else}
         Shortlist vide — mettez une étoile, ou gardez des Prénoms dans les Cartes.
       {/if}
@@ -195,5 +230,14 @@
   .empty {
     padding: 2rem 1.25rem;
     color: var(--ink-soft);
+  }
+
+  .undo {
+    border: 0;
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: var(--accent);
+    text-decoration: underline;
   }
 </style>

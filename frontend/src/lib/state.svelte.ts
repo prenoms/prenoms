@@ -2,6 +2,7 @@ import type { Mode, Prenom, Verdict } from "./domain";
 import { Outbox } from "./outbox";
 import * as api from "./api";
 import { ID_PATTERN, normaliseId } from "./api";
+import { defaultFilter, type PrenomFilter } from "./prenom-filter";
 import { parseRoute, type Route } from "./route";
 import {
   SessionCache,
@@ -190,6 +191,19 @@ export function setView(view: View) {
 addEventListener("hashchange", () => {
   ui.view = viewFromHash();
 });
+
+/**
+ * The Filter lives here rather than in Parcourir because `App.svelte` remounts
+ * that view on `{#key ui.mode}`: a local `$state` would be wiped every time the
+ * Mode is switched, just after four criteria were dialled in. It goes no
+ * further than this tab — not to the server, not into the hash, not onto the
+ * device.
+ */
+export const filter = $state<PrenomFilter>(defaultFilter());
+
+export function resetFilter() {
+  Object.assign(filter, defaultFilter());
+}
 
 /* ---------------------------------------------------------------------- Decks */
 
